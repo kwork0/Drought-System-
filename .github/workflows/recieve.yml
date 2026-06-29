@@ -1,0 +1,23 @@
+name: Receive Flight Data
+on:
+  repository_dispatch:
+    types: [flight-update]
+
+jobs:
+  save:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Write state.json
+        run: echo '${{ toJson(github.event.client_payload) }}' > state.json
+
+      - name: Commit and push
+        run: |
+          git config user.email "droughtbot@github.com"
+          git config user.name "DroughtBot"
+          git add state.json
+          git diff --staged --quiet || git commit -m "live update"
+          git push
