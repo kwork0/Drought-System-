@@ -1,7 +1,8 @@
 {
+  "activeWaypoint": "McGaheysville",
   "aircraft": {
     "lat": 38.28,
-    "lon": -78.9
+    "lon": -78.3979243493652
   },
   "regions": [
     {
