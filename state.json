@@ -1,7 +1,8 @@
 {
+  "activeWaypoint": "Front Royal",
   "aircraft": {
     "lat": 38.28,
-    "lon": -78.4308716611735
+    "lon": -78.4497632089233
   },
   "regions": [
     {
