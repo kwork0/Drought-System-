@@ -323,6 +323,7 @@ header {
   <div class="tb">
     <div class="tk">Aircraft Position</div>
     <div class="tv" id="t-pos" style="font-size:11px;padding-top:6px">—</div>
+    <div class="tu" id="t-mapstat" style="color:var(--muted)">NO SIGNAL</div>
   </div>
   <div class="tb">
     <div class="tk">Drought Index</div>
@@ -407,7 +408,7 @@ const D_CLS   = ["g","g","","w","r","r"];
 // ════════════════════════════════════════════
 // STATE
 // ════════════════════════════════════════════
-let rData = {}, aircraft=null, waypoints=[], activeWp=null, trail=[];
+let rData = {}, aircraft=null, waypoints=[], activeWp=null, trail=[], overMap=false;
 let pingR=0, pingA=0;
 
 // ════════════════════════════════════════════
@@ -472,11 +473,24 @@ function draw() {
     ctx.fillText(reg.name.toUpperCase(),x,y+18);
   });
 
-  // Trail
+  // Trail — connected flight path line, fading from old to recent,
+  // plus faint dots at each recorded point.
+  if(trail.length>1){
+    for(let i=1;i<trail.length;i++){
+      const p0=geo2c(trail[i-1].lat,trail[i-1].lon);
+      const p1=geo2c(trail[i].lat,trail[i].lon);
+      const alpha=(i/trail.length)*0.55;
+      ctx.beginPath();
+      ctx.moveTo(p0.x,p0.y);ctx.lineTo(p1.x,p1.y);
+      ctx.strokeStyle=`rgba(0,255,136,${alpha})`;
+      ctx.lineWidth=1.5;
+      ctx.stroke();
+    }
+  }
   trail.forEach((p,i)=>{
     const {x,y}=geo2c(p.lat,p.lon);
-    ctx.beginPath();ctx.arc(x,y,2,0,Math.PI*2);
-    ctx.fillStyle=`rgba(255,255,255,${(i/trail.length)*0.4})`;
+    ctx.beginPath();ctx.arc(x,y,1.5,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${(i/trail.length)*0.5})`;
     ctx.fill();
   });
 
@@ -490,11 +504,12 @@ function draw() {
   // Aircraft
   if(aircraft){
     const {x,y}=geo2c(aircraft.lat,aircraft.lon);
+    const accentCol = overMap ? "0,255,136" : "150,150,150";
     const ag=ctx.createRadialGradient(x,y,0,x,y,28);
-    ag.addColorStop(0,"rgba(0,255,136,0.25)");ag.addColorStop(1,"rgba(0,255,136,0)");
+    ag.addColorStop(0,`rgba(${accentCol},0.25)`);ag.addColorStop(1,`rgba(${accentCol},0)`);
     ctx.beginPath();ctx.arc(x,y,28,0,Math.PI*2);ctx.fillStyle=ag;ctx.fill();
     ctx.save();ctx.translate(x,y);
-    ctx.fillStyle="#ffffff";ctx.strokeStyle="rgba(0,255,136,0.8)";ctx.lineWidth=1.5;
+    ctx.fillStyle=overMap?"#ffffff":"#888888";ctx.strokeStyle=`rgba(${accentCol},0.8)`;ctx.lineWidth=1.5;
     ctx.beginPath();ctx.moveTo(0,-12);ctx.lineTo(8,10);ctx.lineTo(0,6);ctx.lineTo(-8,10);ctx.closePath();
     ctx.fill();ctx.stroke();
     ctx.restore();
@@ -613,10 +628,14 @@ async function poll(){
       document.getElementById("t-sc").textContent=Object.keys(rData).length;
     }
     if(s.aircraft){
-      if(aircraft){trail.push(aircraft);if(trail.length>60)trail.shift();}
       aircraft=s.aircraft;
       document.getElementById("t-pos").textContent=`${s.aircraft.lat.toFixed(4)}°N  ${Math.abs(s.aircraft.lon).toFixed(4)}°W`;
     }
+    if(Array.isArray(s.trail))trail=s.trail;
+    overMap = !!s.overMap;
+    const ms=document.getElementById("t-mapstat");
+    ms.textContent = overMap ? "ON MAP — TRACKING" : "OFF MAP";
+    ms.style.color = overMap ? "var(--accent)" : "var(--muted)";
     if(s.waypoints&&s.waypoints.length)waypoints=s.waypoints;
     if(s.activeWaypoint){
       activeWp=s.activeWaypoint;
