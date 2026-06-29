@@ -1,0 +1,149 @@
+{
+  "aircraft": {
+    "lat": 38.6783627061462,
+    "lon": -78.4260608015951
+  },
+  "regions": [],
+  "waypoints": [
+    {
+      "col": 1,
+      "lat": 38.99,
+      "lon": -78.36,
+      "name": "Strasburg",
+      "row": 1
+    },
+    {
+      "col": 2,
+      "lat": 38.93,
+      "lon": -78.43,
+      "name": "Fort Valley N",
+      "row": 1
+    },
+    {
+      "col": 3,
+      "lat": 38.62,
+      "lon": -78.19,
+      "name": "Front Royal",
+      "row": 1
+    },
+    {
+      "col": 4,
+      "lat": 38.62,
+      "lon": -78.05,
+      "name": "Warren Co E",
+      "row": 1
+    },
+    {
+      "col": 5,
+      "lat": 38.58,
+      "lon": -78.02,
+      "name": "Blue Ridge N",
+      "row": 1
+    },
+    {
+      "col": 1,
+      "lat": 38.88,
+      "lon": -78.51,
+      "name": "Woodstock",
+      "row": 2
+    },
+    {
+      "col": 2,
+      "lat": 38.82,
+      "lon": -78.47,
+      "name": "Fort Valley S",
+      "row": 2
+    },
+    {
+      "col": 3,
+      "lat": 38.66,
+      "lon": -78.46,
+      "name": "Luray",
+      "row": 2
+    },
+    {
+      "col": 4,
+      "lat": 38.6,
+      "lon": -78.4,
+      "name": "Page Valley",
+      "row": 2
+    },
+    {
+      "col": 5,
+      "lat": 38.55,
+      "lon": -78.38,
+      "name": "Shenandoah N",
+      "row": 2
+    },
+    {
+      "col": 1,
+      "lat": 38.65,
+      "lon": -78.67,
+      "name": "New Market",
+      "row": 3
+    },
+    {
+      "col": 2,
+      "lat": 38.55,
+      "lon": -78.58,
+      "name": "Massanutten",
+      "row": 3
+    },
+    {
+      "col": 3,
+      "lat": 38.55,
+      "lon": -78.53,
+      "name": "Stanley",
+      "row": 3
+    },
+    {
+      "col": 4,
+      "lat": 38.48,
+      "lon": -78.62,
+      "name": "Shenandoah",
+      "row": 3
+    },
+    {
+      "col": 5,
+      "lat": 38.4,
+      "lon": -78.3,
+      "name": "Blue Ridge C",
+      "row": 3
+    },
+    {
+      "col": 1,
+      "lat": 38.45,
+      "lon": -78.87,
+      "name": "Harrisonburg",
+      "row": 4
+    },
+    {
+      "col": 2,
+      "lat": 38.42,
+      "lon": -78.62,
+      "name": "Elkton",
+      "row": 4
+    },
+    {
+      "col": 3,
+      "lat": 38.37,
+      "lon": -78.73,
+      "name": "McGaheysville",
+      "row": 4
+    },
+    {
+      "col": 4,
+      "lat": 38.35,
+      "lon": -78.55,
+      "name": "Rockingham E",
+      "row": 4
+    },
+    {
+      "col": 5,
+      "lat": 38.28,
+      "lon": -78.28,
+      "name": "Swift Run Gap",
+      "row": 4
+    }
+  ]
+}
