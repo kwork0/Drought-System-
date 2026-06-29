@@ -1,889 +1,717 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Shenandoah Drought Ops — Live Flight Monitor</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Shenandoah Drought Ops — Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <style>
-  /* ── TOKENS ────────────────────────────────────────────── */
-  :root {
-    --bg:        #080c10;
-    --surface:   #0d1318;
-    --panel:     #111820;
-    --border:    #1e2d3d;
-    --accent:    #00e5a0;
-    --accent2:   #00b8ff;
-    --warn:      #ffb020;
-    --danger:    #ff4040;
-    --text:      #c8d8e8;
-    --muted:     #4a6070;
-    --mono:      'Share Tech Mono', monospace;
-    --sans:      'Inter', sans-serif;
-  }
+:root {
+  --ink:     #0a0e14;
+  --glass:   rgba(8,14,22,0.82);
+  --panel:   rgba(10,18,28,0.90);
+  --border:  rgba(0,220,160,0.15);
+  --accent:  #00dca0;
+  --accent2: #00aaff;
+  --warn:    #ffb020;
+  --danger:  #ff3f3f;
+  --text:    #ccdde8;
+  --muted:   #3d5a6a;
+  --mono:    'Space Mono', monospace;
+  --sans:    'Space Grotesk', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
 
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--ink);
+}
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 13px;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
+/* ── FULL-BLEED TOPO MAP ─────────────────────────────── */
+#topo-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  /* NASA Earth Observatory Shenandoah topo image */
+  background-image: url('https://eoimages.gsfc.nasa.gov/images/imagerecords/3000/3284/shenandoah_tm5_2002286_lrg.jpg');
+  background-size: cover;
+  background-position: center top;
+  filter: brightness(0.38) saturate(0.7) sepia(0.25);
+}
+/* Dark vignette so edges fade to black */
+#topo-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, transparent 30%, rgba(8,12,18,0.7) 100%);
+}
 
-  /* ── HEADER ─────────────────────────────────────────────── */
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 20px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .header-left { display: flex; align-items: center; gap: 14px; }
-  .logo-mark {
-    width: 32px; height: 32px;
-    background: var(--accent);
-    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-    display: flex; align-items: center; justify-content: center;
-  }
-  .logo-mark svg { width: 16px; height: 16px; }
-  h1 {
-    font-family: var(--mono);
-    font-size: 13px;
-    letter-spacing: 0.12em;
-    color: var(--accent);
-    text-transform: uppercase;
-  }
-  h1 span { color: var(--muted); font-size: 11px; }
-  .status-bar {
-    display: flex; gap: 20px; align-items: center;
-    font-family: var(--mono); font-size: 11px; color: var(--muted);
-  }
-  .pulse {
-    display: inline-flex; align-items: center; gap: 6px;
-  }
-  .pulse-dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
-    animation: blink 1.4s ease-in-out infinite;
-  }
-  .pulse-dot.offline { background: var(--muted); box-shadow: none; animation: none; }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+/* ── SCANLINE TEXTURE ────────────────────────────────── */
+#scanlines {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.06) 2px,
+    rgba(0,0,0,0.06) 4px
+  );
+  pointer-events: none;
+}
 
-  /* ── LAYOUT ─────────────────────────────────────────────── */
-  .main {
-    display: grid;
-    grid-template-columns: 1fr 300px;
-    grid-template-rows: 1fr 180px;
-    gap: 1px;
-    background: var(--border);
-    flex: 1;
-    min-height: 0;
-  }
-  .pane {
-    background: var(--surface);
-    overflow: hidden;
-    position: relative;
-  }
-  .pane-label {
-    position: absolute; top: 10px; left: 12px; z-index: 10;
-    font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
-    color: var(--muted); text-transform: uppercase;
-    background: var(--surface); padding: 2px 6px;
-    border: 1px solid var(--border); border-radius: 2px;
-  }
+/* ── MAP CANVAS (waypoints + aircraft) ──────────────── */
+#map-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+}
 
-  /* ── MAP PANE ───────────────────────────────────────────── */
-  #map-pane {
-    grid-column: 1; grid-row: 1;
-    position: relative;
-  }
-  #map-canvas {
-    width: 100%; height: 100%;
-    display: block;
-  }
+/* ── HEADER ──────────────────────────────────────────── */
+header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+}
+.hdr-left { display: flex; align-items: center; gap: 14px; }
+.hex-logo {
+  width: 30px; height: 30px;
+  background: var(--accent);
+  clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+  flex-shrink: 0;
+}
+.hdr-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+.hdr-title span { color: var(--muted); font-size: 10px; }
+.hdr-right {
+  display: flex; align-items: center; gap: 18px;
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+}
+.live-pill {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(0,220,160,0.08);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 10px;
+}
+.pulse-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.pulse-dot.off { background: var(--muted); box-shadow: none; animation: none; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+#clock { font-family: var(--mono); font-size: 10px; }
 
-  /* ── SIDEBAR ─────────────────────────────────────────────── */
-  #sidebar {
-    grid-column: 2; grid-row: 1 / 3;
-    display: flex; flex-direction: column;
-    padding: 40px 16px 16px;
-    gap: 16px;
-    overflow-y: auto;
-  }
-  .sidebar-section { display: flex; flex-direction: column; gap: 8px; }
-  .section-title {
-    font-family: var(--mono); font-size: 10px;
-    color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase;
-    padding-bottom: 4px; border-bottom: 1px solid var(--border);
-  }
+/* ── SIDEBAR ─────────────────────────────────────────── */
+#sidebar {
+  position: fixed;
+  top: 52px; right: 0; bottom: 120px;
+  width: 280px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 14px 14px;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  backdrop-filter: blur(16px);
+}
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
 
-  /* Aircraft info card */
-  .info-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 12px;
-  }
-  .info-card .region-name {
-    font-family: var(--mono); font-size: 15px;
-    color: var(--accent); letter-spacing: 0.06em;
-    margin-bottom: 6px;
-  }
-  .info-row {
-    display: flex; justify-content: space-between;
-    padding: 3px 0; border-bottom: 1px solid #1a2535;
-    font-size: 11px;
-  }
-  .info-row:last-child { border-bottom: none; }
-  .info-row .key { color: var(--muted); font-family: var(--mono); }
-  .info-row .val { color: var(--text); font-weight: 600; }
-  .info-row .val.good { color: var(--accent); }
-  .info-row .val.warn { color: var(--warn); }
-  .info-row .val.bad  { color: var(--danger); }
+.sec-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  text-transform: uppercase;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
 
-  /* Drought bar */
-  .drought-bar-wrap { margin-top: 8px; }
-  .drought-bar-label {
-    font-family: var(--mono); font-size: 9px; color: var(--muted);
-    letter-spacing: 0.08em; margin-bottom: 4px;
-    display: flex; justify-content: space-between;
-  }
-  .drought-bar-bg {
-    height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;
-  }
-  .drought-bar-fill {
-    height: 100%; width: 0%;
-    background: var(--accent);
-    border-radius: 3px;
-    transition: width 0.8s ease, background 0.8s ease;
-  }
+/* Region card */
+.region-card {
+  background: rgba(0,220,160,0.04);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+}
+.region-card .rname {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 11px;
+}
+.info-row:last-child { border-bottom: none; }
+.info-row .k { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+.info-row .v { font-weight: 600; }
+.v.good   { color: var(--accent); }
+.v.warn   { color: var(--warn); }
+.v.bad    { color: var(--danger); }
 
-  /* Waypoint list */
-  .waypoint-item {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 3px; padding: 8px 10px;
-    display: flex; align-items: center; gap: 10px;
-    cursor: pointer; transition: border-color 0.15s;
-  }
-  .waypoint-item:hover { border-color: var(--accent2); }
-  .waypoint-item.active { border-color: var(--accent); }
-  .wp-dot {
-    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-  }
-  .wp-info { flex: 1; min-width: 0; }
-  .wp-name { font-family: var(--mono); font-size: 11px; color: var(--text); }
-  .wp-drought { font-size: 10px; color: var(--muted); margin-top: 1px; }
-  .wp-badge {
-    font-family: var(--mono); font-size: 9px; padding: 2px 5px;
-    border-radius: 2px; border: 1px solid currentColor;
-  }
+/* Drought bar */
+.dbar-wrap { margin-top: 10px; }
+.dbar-labels {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 9px; color: var(--muted);
+  margin-bottom: 4px;
+}
+.dbar-bg { height: 5px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+.dbar-fill { height: 100%; width: 0%; border-radius: 3px; transition: width 0.8s ease, background 0.8s ease; }
 
-  /* ── TELEMETRY STRIP ─────────────────────────────────────── */
-  #telemetry {
-    grid-column: 1; grid-row: 2;
-    display: flex; align-items: stretch;
-    padding: 0;
-    overflow: hidden;
-  }
-  .telem-block {
-    flex: 1; display: flex; flex-direction: column;
-    justify-content: center; padding: 12px 20px;
-    border-right: 1px solid var(--border);
-    gap: 4px;
-  }
-  .telem-block:last-child { border-right: none; }
-  .telem-key {
-    font-family: var(--mono); font-size: 9px;
-    color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase;
-  }
-  .telem-val {
-    font-family: var(--mono); font-size: 22px;
-    color: var(--accent); line-height: 1;
-  }
-  .telem-val.warn { color: var(--warn); }
-  .telem-val.danger { color: var(--danger); }
-  .telem-unit {
-    font-family: var(--mono); font-size: 10px; color: var(--muted);
-  }
-  .telem-sub { font-size: 10px; color: var(--muted); }
+/* Waypoint list */
+.wp-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.02);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 4px;
+}
+.wp-item:hover { border-color: var(--accent2); background: rgba(0,170,255,0.06); }
+.wp-item.active { border-color: var(--accent); background: rgba(0,220,160,0.07); }
+.wp-dot-sm { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.wp-info { flex: 1; min-width: 0; }
+.wp-name { font-family: var(--mono); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-sub { font-size: 9px; color: var(--muted); margin-top: 1px; }
+.wp-badge { font-family: var(--mono); font-size: 9px; padding: 1px 5px; border-radius: 3px; border: 1px solid currentColor; }
 
-  /* ── SCROLLBAR ──────────────────────────────────────────── */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+/* ── TELEMETRY STRIP ─────────────────────────────────── */
+#telem {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 110px;
+  z-index: 10;
+  display: flex;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+}
+.t-block {
+  flex: 1;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 10px 18px;
+  border-right: 1px solid var(--border);
+  gap: 3px;
+}
+.t-block:last-child { border-right: none; }
+.t-key { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+.t-val { font-family: var(--mono); font-size: 20px; color: var(--accent); line-height: 1; }
+.t-val.warn { color: var(--warn); }
+.t-val.bad  { color: var(--danger); }
+.t-unit { font-family: var(--mono); font-size: 9px; color: var(--muted); }
 
-  /* ── TIMESTAMP ──────────────────────────────────────────── */
-  #clock {
-    font-family: var(--mono); font-size: 11px; color: var(--muted);
-  }
+/* ── TOOLTIP ─────────────────────────────────────────── */
+#tooltip {
+  position: fixed;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text);
+  pointer-events: none;
+  z-index: 50;
+  display: none;
+  max-width: 190px;
+  line-height: 1.7;
+  backdrop-filter: blur(10px);
+}
 
-  /* ── TOOLTIP ─────────────────────────────────────────────── */
-  #tooltip {
-    position: fixed;
-    background: #0d1f2d;
-    border: 1px solid var(--accent);
-    border-radius: 4px;
-    padding: 8px 12px;
-    font-family: var(--mono); font-size: 11px;
-    color: var(--text);
-    pointer-events: none;
-    z-index: 100;
-    display: none;
-    max-width: 200px;
-    line-height: 1.6;
-  }
-
-  /* ── AIRCRAFT TRAIL ─────────────────────────────────────── */
-  .trail-dot {
-    position: absolute;
-    border-radius: 50%;
-    background: var(--accent2);
-    opacity: 0.3;
-    pointer-events: none;
-    transform: translate(-50%, -50%);
-    transition: all 0.3s;
-  }
-
-  /* ── NO DATA STATE ───────────────────────────────────────── */
-  .no-data-msg {
-    color: var(--muted); font-family: var(--mono); font-size: 11px;
-    text-align: center; padding: 20px 0; line-height: 1.8;
-  }
+/* ── MAP LABEL (bottom-left) ─────────────────────────── */
+#map-credit {
+  position: fixed;
+  bottom: 118px; left: 14px;
+  font-family: var(--mono); font-size: 9px;
+  color: var(--muted);
+  z-index: 10;
+  letter-spacing: 0.06em;
+}
 </style>
 </head>
 <body>
 
+<div id="topo-bg"></div>
+<div id="scanlines"></div>
+<canvas id="map-canvas"></canvas>
+
 <header>
-  <div class="header-left">
-    <div class="logo-mark">
-      <svg viewBox="0 0 16 16" fill="#080c10"><path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5Z"/></svg>
-    </div>
-    <div>
-      <h1>SHENANDOAH DROUGHT OPS <span>// LIVE MONITOR</span></h1>
+  <div class="hdr-left">
+    <div class="hex-logo"></div>
+    <div class="hdr-title">
+      SHENANDOAH DROUGHT OPS<br>
+      <span>LIVE FLIGHT MONITOR — SHENANDOAH VALLEY, VA</span>
     </div>
   </div>
-  <div class="status-bar">
-    <div class="pulse">
-      <span class="pulse-dot" id="live-dot"></span>
+  <div class="hdr-right">
+    <div class="live-pill">
+      <div class="pulse-dot off" id="live-dot"></div>
       <span id="live-label">AWAITING SIGNAL</span>
     </div>
     <span id="clock">--:--:-- UTC</span>
-    <span id="last-update">NO DATA</span>
+    <span id="last-upd">NO DATA</span>
   </div>
 </header>
 
-<div class="main">
-
-  <!-- MAP -->
-  <div class="pane" id="map-pane">
-    <span class="pane-label">TOPOGRAPHIC MAP — SHENANDOAH VALLEY</span>
-    <canvas id="map-canvas"></canvas>
-  </div>
-
-  <!-- SIDEBAR -->
-  <div class="pane" id="sidebar">
-    <span class="pane-label">FLIGHT DATA</span>
-
-    <div class="sidebar-section">
-      <div class="section-title">Current Region</div>
-      <div class="info-card" id="region-card">
-        <div class="region-name" id="region-name">—</div>
-        <div class="info-row"><span class="key">DROUGHT</span><span class="val" id="si-drought">—</span></div>
-        <div class="info-row"><span class="key">PRECIP</span><span class="val" id="si-precip">—</span></div>
-        <div class="info-row"><span class="key">TEMP</span><span class="val" id="si-temp">—</span></div>
-        <div class="info-row"><span class="key">UPDATED</span><span class="val" id="si-date">—</span></div>
-        <div class="drought-bar-wrap">
-          <div class="drought-bar-label">
-            <span>NONE</span><span id="drought-label-text">—</span><span>D4</span>
-          </div>
-          <div class="drought-bar-bg"><div class="drought-bar-fill" id="drought-bar-fill"></div></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="sidebar-section">
-      <div class="section-title">Waypoints</div>
-      <div id="waypoint-list">
-        <div class="no-data-msg">Waiting for<br/>game data…</div>
-      </div>
-    </div>
-
-    <div class="sidebar-section">
-      <div class="section-title">Mission Notes</div>
-      <div class="info-card">
-        <div style="font-size:11px;color:var(--muted);line-height:1.7" id="mission-notes">
-          Aircraft not yet detected.<br/>Start the Roblox game and trigger<br/>a SCAN ALL to populate data.
-        </div>
-      </div>
+<div id="sidebar">
+  <div class="sec-label">Current Region</div>
+  <div class="region-card">
+    <div class="rname" id="rname">—</div>
+    <div class="info-row"><span class="k">DROUGHT</span><span class="v" id="si-drought">—</span></div>
+    <div class="info-row"><span class="k">PRECIP</span><span class="v" id="si-precip">—</span></div>
+    <div class="info-row"><span class="k">TEMP</span><span class="v" id="si-temp">—</span></div>
+    <div class="info-row"><span class="k">UPDATED</span><span class="v" id="si-date">—</span></div>
+    <div class="dbar-wrap">
+      <div class="dbar-labels"><span>NONE</span><span id="dbar-text">—</span><span>D4</span></div>
+      <div class="dbar-bg"><div class="dbar-fill" id="dbar-fill"></div></div>
     </div>
   </div>
 
-  <!-- TELEMETRY STRIP -->
-  <div class="pane" id="telemetry">
-    <div class="telem-block">
-      <div class="telem-key">Aircraft Position</div>
-      <div class="telem-val" id="t-pos" style="font-size:14px;padding-top:4px">—</div>
-    </div>
-    <div class="telem-block">
-      <div class="telem-key">Drought Level</div>
-      <div class="telem-val" id="t-drought">—</div>
-      <div class="telem-unit" id="t-drought-name">NO DATA</div>
-    </div>
-    <div class="telem-block">
-      <div class="telem-key">Precipitation</div>
-      <div class="telem-val" id="t-precip">—</div>
-      <div class="telem-unit">in / month</div>
-    </div>
-    <div class="telem-block">
-      <div class="telem-key">Temperature</div>
-      <div class="telem-val" id="t-temp">—</div>
-      <div class="telem-unit">°F</div>
-    </div>
-    <div class="telem-block">
-      <div class="telem-key">Active Waypoint</div>
-      <div class="telem-val" id="t-wp" style="font-size:14px;padding-top:4px">—</div>
-    </div>
-    <div class="telem-block">
-      <div class="telem-key">Regions Scanned</div>
-      <div class="telem-val" id="t-scanned">0</div>
-      <div class="telem-unit">of 20</div>
+  <div class="sec-label" style="margin-top:6px;">Waypoints</div>
+  <div id="wp-list"><div style="color:var(--muted);font-family:var(--mono);font-size:10px;padding:10px 0;text-align:center;">Waiting for game data…</div></div>
+
+  <div class="sec-label" style="margin-top:6px;">Mission Notes</div>
+  <div class="region-card">
+    <div id="mission-notes" style="font-size:11px;color:var(--muted);line-height:1.7;">
+      Aircraft not detected.<br>Run SCAN ALL in Roblox to populate drought data.
     </div>
   </div>
-
 </div>
 
+<div id="telem">
+  <div class="t-block">
+    <div class="t-key">Aircraft Position</div>
+    <div class="t-val" id="t-pos" style="font-size:12px;padding-top:6px;">—</div>
+  </div>
+  <div class="t-block">
+    <div class="t-key">Drought Level</div>
+    <div class="t-val" id="t-dl">—</div>
+    <div class="t-unit" id="t-dlname">NO DATA</div>
+  </div>
+  <div class="t-block">
+    <div class="t-key">Precipitation</div>
+    <div class="t-val" id="t-precip">—</div>
+    <div class="t-unit">in / month</div>
+  </div>
+  <div class="t-block">
+    <div class="t-key">Temperature</div>
+    <div class="t-val" id="t-temp">—</div>
+    <div class="t-unit">°F</div>
+  </div>
+  <div class="t-block">
+    <div class="t-key">Active Waypoint</div>
+    <div class="t-val" id="t-wp" style="font-size:12px;padding-top:6px;">—</div>
+  </div>
+  <div class="t-block">
+    <div class="t-key">Regions Scanned</div>
+    <div class="t-val" id="t-scanned">0</div>
+    <div class="t-unit">of 20</div>
+  </div>
+</div>
+
+<div id="map-credit">IMAGE: NASA EARTH OBSERVATORY — SHENANDOAH NATIONAL PARK, VA</div>
 <div id="tooltip"></div>
 
 <script>
-// ═══════════════════════════════════════════════════════
-//  CONFIG — paste your Pipedream endpoint URL here
-// ═══════════════════════════════════════════════════════
-const PIPEDREAM_URL = "https://kwork0.github.io/Drought-System-/state.json";
-// e.g. "https://enxxxxxxxx.m.pipedream.net/state"
-// This is what Roblox POSTs to, and what we GET from
+// ═══════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════
+const STATE_URL      = "https://kwork0.github.io/Drought-System-/state.json";
+const POLL_MS        = 5000;
 
-const POLL_INTERVAL_MS = 3000; // how often to check for new data
+// ═══════════════════════════════════════════════════
+// GEO BOUNDS — real Shenandoah Valley
+// The topo image covers roughly this bounding box:
+// ═══════════════════════════════════════════════════
+const GEO = { latMin:38.28, latMax:38.99, lonMin:-78.90, lonMax:-78.02 };
 
-// ═══════════════════════════════════════════════════════
-//  REGION DATA — matches your Roblox grid exactly
-// ═══════════════════════════════════════════════════════
-const REGION_NAMES = [
-  ["Strasburg",    "Fort Valley N", "Front Royal",   "Warren Co E",  "Blue Ridge N"],
-  ["Woodstock",    "Fort Valley S", "Luray",         "Page Valley",  "Shenandoah N"],
-  ["New Market",   "Massanutten",   "Stanley",       "Shenandoah",   "Blue Ridge C"],
-  ["Harrisonburg", "Elkton",        "McGaheysville", "Rockingham E", "Swift Run Gap"]
-];
-
-// Real lat/lon anchors (matches your server script regionCoords)
-const REGION_COORDS = [
-  [ [38.99,-78.36],[38.93,-78.43],[38.62,-78.19],[38.62,-78.05],[38.58,-78.02] ],
-  [ [38.88,-78.51],[38.82,-78.47],[38.66,-78.46],[38.60,-78.40],[38.55,-78.38] ],
-  [ [38.65,-78.67],[38.55,-78.58],[38.55,-78.53],[38.48,-78.62],[38.40,-78.30] ],
-  [ [38.45,-78.87],[38.42,-78.62],[38.37,-78.73],[38.35,-78.55],[38.28,-78.28] ],
-];
-
-const LAT_MIN=38.28, LAT_MAX=38.99, LON_MIN=-78.90, LON_MAX=-78.02;
-
-const DROUGHT_COLORS = ["#00c878","#50c850","#ffb400","#ff5028","#dc1e1e","#a00000"];
-const DROUGHT_NAMES  = ["NONE / WET","D0 — ABNORMALLY DRY","D1 — MODERATE","D2 — SEVERE","D3 — EXTREME","D4 — EXCEPTIONAL"];
-
-// ═══════════════════════════════════════════════════════
-//  STATE
-// ═══════════════════════════════════════════════════════
-let regionData = {};   // key "R{r}C{c}" → {droughtLevel, precip, temp, date}
-let aircraftPos = null; // {lat, lon} in geo coords
-let waypoints = [];    // [{name, lat, lon, row, col}]
-let activeWaypoint = null;
-let trailPoints = [];
-let scannedCount = 0;
-let isLive = false;
-
-// ═══════════════════════════════════════════════════════
-//  CANVAS MAP
-// ═══════════════════════════════════════════════════════
-const canvas = document.getElementById("map-canvas");
-const ctx = canvas.getContext("2d");
-
-function resizeCanvas() {
-  const pane = document.getElementById("map-pane");
-  canvas.width  = pane.clientWidth;
-  canvas.height = pane.clientHeight;
-  drawMap();
+// Map canvas occupies the full screen minus sidebar (280px) and header (52px) / telem (110px)
+function mapBounds() {
+  return {
+    x: 0,
+    y: 52,
+    w: window.innerWidth - 280,
+    h: window.innerHeight - 52 - 110
+  };
 }
 
-// Convert geo → canvas pixels
 function geoToCanvas(lat, lon) {
-  const x = ((lon - LON_MIN) / (LON_MAX - LON_MIN)) * canvas.width;
-  const y = (1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * canvas.height;
-  return {x, y};
+  const b = mapBounds();
+  const xFrac = (lon - GEO.lonMin) / (GEO.lonMax - GEO.lonMin);
+  const yFrac = 1 - (lat - GEO.latMin) / (GEO.latMax - GEO.latMin);
+  return { x: b.x + xFrac * b.w, y: b.y + yFrac * b.h };
 }
 
-function drawMap() {
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
+// ═══════════════════════════════════════════════════
+// REGION + WAYPOINT DATA
+// ═══════════════════════════════════════════════════
+const REGIONS = [
+  {name:"Strasburg",    lat:38.99, lon:-78.36, row:1, col:1},
+  {name:"Fort Valley N",lat:38.93, lon:-78.43, row:1, col:2},
+  {name:"Front Royal",  lat:38.62, lon:-78.19, row:1, col:3},
+  {name:"Warren Co E",  lat:38.62, lon:-78.05, row:1, col:4},
+  {name:"Blue Ridge N", lat:38.58, lon:-78.02, row:1, col:5},
+  {name:"Woodstock",    lat:38.88, lon:-78.51, row:2, col:1},
+  {name:"Fort Valley S",lat:38.82, lon:-78.47, row:2, col:2},
+  {name:"Luray",        lat:38.66, lon:-78.46, row:2, col:3},
+  {name:"Page Valley",  lat:38.60, lon:-78.40, row:2, col:4},
+  {name:"Shenandoah N", lat:38.55, lon:-78.38, row:2, col:5},
+  {name:"New Market",   lat:38.65, lon:-78.67, row:3, col:1},
+  {name:"Massanutten",  lat:38.55, lon:-78.58, row:3, col:2},
+  {name:"Stanley",      lat:38.55, lon:-78.53, row:3, col:3},
+  {name:"Shenandoah",   lat:38.48, lon:-78.62, row:3, col:4},
+  {name:"Blue Ridge C", lat:38.40, lon:-78.30, row:3, col:5},
+  {name:"Harrisonburg", lat:38.45, lon:-78.87, row:4, col:1},
+  {name:"Elkton",       lat:38.42, lon:-78.62, row:4, col:2},
+  {name:"McGaheysville",lat:38.37, lon:-78.73, row:4, col:3},
+  {name:"Rockingham E", lat:38.35, lon:-78.55, row:4, col:4},
+  {name:"Swift Run Gap",lat:38.28, lon:-78.28, row:4, col:5},
+];
 
-  // Background: dark terrain gradient
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0,   "#0a1a10");
-  bg.addColorStop(0.4, "#0c1e18");
-  bg.addColorStop(1,   "#08151e");
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
+const D_COLORS = ["#00c878","#50c850","#ffb400","#ff5028","#dc1e1e","#a00000"];
+const D_NAMES  = ["NONE / WET","D0 — ABNORM. DRY","D1 — MODERATE","D2 — SEVERE","D3 — EXTREME","D4 — EXCEPTIONAL"];
+const D_CLASS  = ["good","good","warn","bad","bad","bad"];
 
-  // Topo contour lines (decorative, evokes real topographic map)
-  drawTopoLines(W, H);
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let regionData     = {};   // "R{r}C{c}" → {droughtLevel,precip,temp,date}
+let aircraftPos    = null;
+let waypoints      = [];
+let activeWaypoint = null;
+let trail          = [];
+let pingR = 0, pingA = 0;
 
-  // Grid lines
-  ctx.strokeStyle = "rgba(30,45,60,0.6)";
+// ═══════════════════════════════════════════════════
+// CANVAS
+// ═══════════════════════════════════════════════════
+const canvas = document.getElementById("map-canvas");
+const ctx    = canvas.getContext("2d");
+
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  draw();
+}
+window.addEventListener("resize", resize);
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const b = mapBounds();
+
+  // Subtle coordinate grid aligned to geo bounds
+  ctx.strokeStyle = "rgba(0,220,160,0.06)";
   ctx.lineWidth = 1;
-  for (let c = 0; c <= 5; c++) {
-    const x = (c/5)*W;
-    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
-  }
+  ctx.setLineDash([2,8]);
   for (let r = 0; r <= 4; r++) {
-    const y = (r/4)*H;
-    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    const y = b.y + (r/4)*b.h;
+    ctx.beginPath(); ctx.moveTo(b.x, y); ctx.lineTo(b.x+b.w, y); ctx.stroke();
   }
-
-  // Region cells
-  for (let r = 1; r <= 4; r++) {
-    for (let c = 1; c <= 5; c++) {
-      const key = `R${r}C${c}`;
-      const data = regionData[key];
-      const [lat, lon] = REGION_COORDS[r-1][c-1];
-      const {x, y} = geoToCanvas(lat, lon);
-      const cellW = W/5, cellH = H/4;
-      const cx = ((c-1)/5)*W + cellW/2;
-      const cy = ((r-1)/4)*H + cellH/2;
-
-      if (data) {
-        const lvl = Math.max(0, Math.min(5, data.droughtLevel));
-        const col = DROUGHT_COLORS[lvl];
-        // Cell fill
-        ctx.fillStyle = col + "18";
-        ctx.fillRect((c-1)/5*W+1, (r-1)/4*H+1, cellW-2, cellH-2);
-        // Region dot
-        drawRegionDot(cx, cy, col, 10, REGION_NAMES[r-1][c-1]);
-      } else {
-        // Unknown region — dim
-        ctx.fillStyle = "rgba(15,25,35,0.4)";
-        ctx.fillRect((c-1)/5*W+1, (r-1)/4*H+1, cellW-2, cellH-2);
-        drawRegionDot(cx, cy, "#1e2d3d", 7, REGION_NAMES[r-1][c-1]);
-      }
-
-      // Region label
-      ctx.fillStyle = data ? "#4a6070" : "#2a3a4a";
-      ctx.font = `9px 'Share Tech Mono'`;
-      ctx.textAlign = "center";
-      ctx.fillText(REGION_NAMES[r-1][c-1].toUpperCase(), cx, cy + 18);
-    }
+  for (let c = 0; c <= 5; c++) {
+    const x = b.x + (c/5)*b.w;
+    ctx.beginPath(); ctx.moveTo(x, b.y); ctx.lineTo(x, b.y+b.h); ctx.stroke();
   }
+  ctx.setLineDash([]);
 
-  // Aircraft trail
-  for (let i = 0; i < trailPoints.length; i++) {
-    const {x, y} = geoToCanvas(trailPoints[i].lat, trailPoints[i].lon);
-    const alpha = (i / trailPoints.length) * 0.5;
-    ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(0,184,255,${alpha})`;
-    ctx.fill();
-  }
+  // Region dots at real geo positions
+  REGIONS.forEach(reg => {
+    const key  = `R${reg.row}C${reg.col}`;
+    const data = regionData[key];
+    const {x, y} = geoToCanvas(reg.lat, reg.lon);
+    const lvl  = data ? Math.max(0,Math.min(5,data.droughtLevel)) : -1;
+    const col  = lvl >= 0 ? D_COLORS[lvl] : "#1e3040";
 
-  // Waypoints
-  waypoints.forEach((wp, i) => {
-    const {x, y} = geoToCanvas(wp.lat, wp.lon);
-    const isActive = activeWaypoint === wp.name;
-    // Crosshair marker
-    ctx.strokeStyle = isActive ? "#00e5a0" : "#00b8ff";
-    ctx.lineWidth = isActive ? 2 : 1;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath(); ctx.moveTo(x-12,y); ctx.lineTo(x+12,y); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x,y-12); ctx.lineTo(x,y+12); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2);
-    ctx.strokeStyle = isActive ? "#00e5a0" : "#00b8ff";
-    ctx.fillStyle   = isActive ? "#00e5a020" : "transparent";
-    ctx.lineWidth = 1.5;
+    // Glow
+    const g = ctx.createRadialGradient(x,y,0,x,y,18);
+    g.addColorStop(0, col+"55");
+    g.addColorStop(1, col+"00");
+    ctx.beginPath(); ctx.arc(x,y,18,0,Math.PI*2);
+    ctx.fillStyle = g; ctx.fill();
+
+    // Dot
+    ctx.beginPath(); ctx.arc(x,y,lvl>=0?8:5,0,Math.PI*2);
+    ctx.fillStyle   = col;
+    ctx.strokeStyle = col+"99";
+    ctx.lineWidth   = 2;
     ctx.fill(); ctx.stroke();
+
     // Label
-    ctx.fillStyle = isActive ? "#00e5a0" : "#00b8ff";
-    ctx.font = `9px 'Share Tech Mono'`;
-    ctx.textAlign = "left";
-    ctx.fillText(`WP${i+1}`, x + 8, y - 6);
+    ctx.fillStyle   = data ? col : "#2a4050";
+    ctx.font        = `bold 9px 'Space Mono'`;
+    ctx.textAlign   = "center";
+    ctx.fillText(reg.name.toUpperCase(), x, y + 18);
   });
 
-  // Aircraft
+  // Aircraft trail
+  trail.forEach((p, i) => {
+    const {x,y} = geoToCanvas(p.lat, p.lon);
+    ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2);
+    ctx.fillStyle = `rgba(0,170,255,${(i/trail.length)*0.55})`;
+    ctx.fill();
+  });
+
+  // Ping ring on aircraft
+  if (aircraftPos && pingA > 0.01) {
+    const {x,y} = geoToCanvas(aircraftPos.lat, aircraftPos.lon);
+    ctx.beginPath(); ctx.arc(x,y,pingR,0,Math.PI*2);
+    ctx.strokeStyle = `rgba(0,220,160,${pingA})`;
+    ctx.lineWidth   = 1.5;
+    ctx.stroke();
+  }
+
+  // Aircraft icon
   if (aircraftPos) {
-    const {x, y} = geoToCanvas(aircraftPos.lat, aircraftPos.lon);
-    // Outer glow
-    const grad = ctx.createRadialGradient(x,y,0,x,y,22);
-    grad.addColorStop(0, "rgba(0,229,160,0.25)");
-    grad.addColorStop(1, "rgba(0,229,160,0)");
-    ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI*2);
-    ctx.fillStyle = grad; ctx.fill();
-    // Aircraft triangle
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.fillStyle = "#00e5a0";
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 1;
+    const {x,y} = geoToCanvas(aircraftPos.lat, aircraftPos.lon);
+    // outer glow
+    const ag = ctx.createRadialGradient(x,y,0,x,y,26);
+    ag.addColorStop(0,"rgba(0,220,160,0.3)");
+    ag.addColorStop(1,"rgba(0,220,160,0)");
+    ctx.beginPath(); ctx.arc(x,y,26,0,Math.PI*2);
+    ctx.fillStyle = ag; ctx.fill();
+    // plane shape
+    ctx.save(); ctx.translate(x,y);
+    ctx.fillStyle   = "#00dca0";
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth   = 1;
     ctx.beginPath();
-    ctx.moveTo(0, -10);
-    ctx.lineTo(6, 8);
-    ctx.lineTo(0, 4);
-    ctx.lineTo(-6, 8);
+    ctx.moveTo(0,-11); ctx.lineTo(7,9); ctx.lineTo(0,5); ctx.lineTo(-7,9);
     ctx.closePath();
     ctx.fill(); ctx.stroke();
     ctx.restore();
-    // Ping ring
-    drawPing(x, y);
   }
 
-  // Border
-  ctx.strokeStyle = "rgba(0,229,160,0.12)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(1,1,W-2,H-2);
+  // Waypoints (crosshair style)
+  waypoints.forEach((wp, i) => {
+    const {x,y} = geoToCanvas(wp.lat, wp.lon);
+    const isAct = activeWaypoint === wp.name;
+    const col   = isAct ? "#00dca0" : "#00aaff";
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = isAct ? 2 : 1;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(x-14,y); ctx.lineTo(x+14,y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x,y-14); ctx.lineTo(x,y+14); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2);
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    ctx.fillStyle   = col+"22";
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle   = col;
+    ctx.font        = `9px 'Space Mono'`;
+    ctx.textAlign   = "left";
+    ctx.fillText(`WP${i+1}`, x+8, y-5);
+  });
 }
 
-function drawRegionDot(cx, cy, color, radius, name) {
-  // Glow
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius*2.5);
-  g.addColorStop(0, color + "60");
-  g.addColorStop(1, color + "00");
-  ctx.beginPath(); ctx.arc(cx, cy, radius*2.5, 0, Math.PI*2);
-  ctx.fillStyle = g; ctx.fill();
-  // Dot
-  ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI*2);
-  ctx.fillStyle = color;
-  ctx.strokeStyle = color + "80";
-  ctx.lineWidth = 2;
-  ctx.fill(); ctx.stroke();
-}
-
-let pingRadius = 0;
-let pingAlpha  = 0;
-function drawPing(x, y) {
-  if (pingAlpha > 0.01) {
-    ctx.beginPath(); ctx.arc(x, y, pingRadius, 0, Math.PI*2);
-    ctx.strokeStyle = `rgba(0,229,160,${pingAlpha})`;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  }
-}
-
+// Animate ping ring
 function animatePing() {
-  pingRadius += 1;
-  pingAlpha -= 0.01;
-  if (pingAlpha <= 0) { pingRadius = 0; pingAlpha = 0.8; }
-  if (aircraftPos) drawMap();
+  pingR += 0.8;
+  pingA -= 0.008;
+  if (pingA <= 0) { pingR = 0; pingA = 0.7; }
+  if (aircraftPos) draw();
   requestAnimationFrame(animatePing);
 }
 
-function drawTopoLines(W, H) {
-  // Stylized topo contour approximation — purely decorative
-  ctx.strokeStyle = "rgba(0,100,60,0.12)";
-  ctx.lineWidth = 1;
-  ctx.setLineDash([2, 6]);
-  const lines = [0.2, 0.35, 0.5, 0.62, 0.74, 0.85];
-  lines.forEach((t, i) => {
-    ctx.beginPath();
-    const yBase = t * H;
-    const amp = (i%2===0?1:-1) * 18;
-    ctx.moveTo(0, yBase);
-    for (let x = 0; x <= W; x += 20) {
-      const y = yBase + Math.sin(x/80 + i) * amp + Math.cos(x/130) * amp*0.5;
-      ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  });
-  ctx.setLineDash([]);
-}
-
-// ═══════════════════════════════════════════════════════
-//  TOOLTIP (hover over canvas)
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// TOOLTIP
+// ═══════════════════════════════════════════════════
 const tooltip = document.getElementById("tooltip");
-canvas.addEventListener("mousemove", (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-  // Find closest region cell
-  const col = Math.floor((mx / canvas.width)  * 5) + 1;
-  const row = Math.floor((my / canvas.height) * 4) + 1;
-  if (row >= 1 && row <= 4 && col >= 1 && col <= 5) {
-    const key = `R${row}C${col}`;
+canvas.addEventListener("mousemove", e => {
+  const b = mapBounds();
+  const mx = e.clientX, my = e.clientY;
+  let closest = null, minDist = 30;
+  REGIONS.forEach(reg => {
+    const {x,y} = geoToCanvas(reg.lat, reg.lon);
+    const d = Math.hypot(mx-x, my-y);
+    if (d < minDist) { minDist=d; closest=reg; }
+  });
+  if (closest) {
+    const key  = `R${closest.row}C${closest.col}`;
     const data = regionData[key];
-    const name = REGION_NAMES[row-1][col-1];
-    let html = `<b style="color:#00e5a0">${name.toUpperCase()}</b><br>`;
+    const lvl  = data ? Math.max(0,Math.min(5,data.droughtLevel)) : -1;
+    let html   = `<b style="color:#00dca0">${closest.name.toUpperCase()}</b><br>`;
     if (data) {
-      const lvl = Math.max(0,Math.min(5,data.droughtLevel));
-      html += `${DROUGHT_NAMES[lvl]}<br>`;
-      html += `Precip: ${typeof data.precip==='number'?data.precip.toFixed(2)+' in/mo':data.precip}<br>`;
-      html += `Temp: ${typeof data.temp==='number'?data.temp.toFixed(1)+'°F':data.temp}`;
+      html += `${D_NAMES[lvl]}<br>`;
+      html += `Precip: ${typeof data.precip==='number'?data.precip.toFixed(2)+' in/mo':data.precip||'—'}<br>`;
+      html += `Temp: ${typeof data.temp==='number'?data.temp.toFixed(1)+'°F':data.temp||'—'}`;
     } else {
-      html += `<span style="color:#4a6070">No data yet</span>`;
+      html += `<span style="color:#3d5a6a">No scan data yet</span>`;
     }
     tooltip.innerHTML = html;
     tooltip.style.display = "block";
-    tooltip.style.left = (e.clientX + 14) + "px";
-    tooltip.style.top  = (e.clientY - 10) + "px";
+    tooltip.style.left = (e.clientX+14)+"px";
+    tooltip.style.top  = (e.clientY-10)+"px";
+  } else {
+    tooltip.style.display = "none";
   }
 });
-canvas.addEventListener("mouseleave", () => { tooltip.style.display = "none"; });
+canvas.addEventListener("mouseleave", () => tooltip.style.display = "none");
 
-// ═══════════════════════════════════════════════════════
-//  UI UPDATES
-// ═══════════════════════════════════════════════════════
-const droughtClassMap = ["good","good","warn","bad","bad","bad"];
-
+// ═══════════════════════════════════════════════════
+// UI UPDATE
+// ═══════════════════════════════════════════════════
 function updateSidebar(regionKey) {
   const data = regionData[regionKey];
-  const parts = regionKey.match(/R(\d)C(\d)/);
-  const name = parts ? REGION_NAMES[parts[1]-1][parts[2]-1] : regionKey;
-
-  document.getElementById("region-name").textContent = name.toUpperCase();
+  const reg  = REGIONS.find(r=>`R${r.row}C${r.col}`===regionKey);
+  document.getElementById("rname").textContent = reg ? reg.name.toUpperCase() : regionKey;
   if (!data) return;
-
   const lvl = Math.max(0,Math.min(5,data.droughtLevel));
-  const cls = droughtClassMap[lvl];
-
+  const cl  = D_CLASS[lvl];
   const drought = document.getElementById("si-drought");
-  drought.textContent = DROUGHT_NAMES[lvl];
-  drought.className = "val " + cls;
-
-  document.getElementById("si-precip").textContent =
-    typeof data.precip==='number' ? data.precip.toFixed(2)+' in/mo' : (data.precip||'—');
-  document.getElementById("si-temp").textContent =
-    typeof data.temp==='number' ? data.temp.toFixed(1)+'°F' : (data.temp||'—');
-  document.getElementById("si-date").textContent = data.date || '—';
-
-  // Bar
-  const fill = document.getElementById("drought-bar-fill");
-  const pct  = (lvl / 5) * 100;
-  fill.style.width      = pct + "%";
-  fill.style.background = DROUGHT_COLORS[lvl];
-  document.getElementById("drought-label-text").textContent = DROUGHT_NAMES[lvl].split("—")[0].trim();
-
-  // Telemetry
-  document.getElementById("t-drought").textContent = `D${lvl}`;
-  document.getElementById("t-drought").className = "telem-val " + (lvl>=3?"danger":lvl>=2?"warn":"");
-  document.getElementById("t-drought-name").textContent = DROUGHT_NAMES[lvl];
-  document.getElementById("t-precip").textContent =
-    typeof data.precip==='number' ? data.precip.toFixed(2) : '—';
-  document.getElementById("t-temp").textContent =
-    typeof data.temp==='number' ? data.temp.toFixed(1) : '—';
-
-  // Notes
-  const noteMap = [
-    "Vegetation health nominal. No water stress detected.",
-    "Conditions abnormally dry. Monitor soil moisture levels.",
-    "Moderate drought. Crop stress likely across affected regions.",
-    "Severe drought detected. Water conservation recommended.",
-    "Extreme drought. Widespread agricultural losses possible.",
-    "EXCEPTIONAL DROUGHT — Emergency conservation in effect."
-  ];
+  drought.textContent = D_NAMES[lvl]; drought.className = "v "+cl;
+  document.getElementById("si-precip").textContent = typeof data.precip==='number'?data.precip.toFixed(2)+' in/mo':(data.precip||'—');
+  document.getElementById("si-temp").textContent   = typeof data.temp==='number'?data.temp.toFixed(1)+'°F':(data.temp||'—');
+  document.getElementById("si-date").textContent   = data.date||'—';
+  const fill = document.getElementById("dbar-fill");
+  fill.style.width      = ((lvl/5)*100)+"%";
+  fill.style.background = D_COLORS[lvl];
+  document.getElementById("dbar-text").textContent = D_NAMES[lvl];
+  // telemetry
+  const td = document.getElementById("t-dl");
+  td.textContent = `D${lvl}`; td.className = "t-val "+(lvl>=3?"bad":lvl>=2?"warn":"");
+  document.getElementById("t-dlname").textContent  = D_NAMES[lvl];
+  document.getElementById("t-precip").textContent  = typeof data.precip==='number'?data.precip.toFixed(2):'—';
+  document.getElementById("t-temp").textContent    = typeof data.temp==='number'?data.temp.toFixed(1):'—';
+  // notes
+  const notes=["Vegetation health nominal. No stress detected.","Conditions abnormally dry. Monitor soil moisture.","Moderate drought. Crop stress likely.","Severe drought. Water conservation recommended.","Extreme drought. Widespread agricultural losses.","EXCEPTIONAL DROUGHT — Emergency conservation in effect."];
   document.getElementById("mission-notes").innerHTML =
-    `<span style="color:${DROUGHT_COLORS[lvl]}">${name}</span><br><br>` + noteMap[lvl];
+    `<span style="color:${D_COLORS[lvl]}">${reg?reg.name:regionKey}</span><br><br>${notes[lvl]}`;
 }
 
-function updateWaypointList() {
-  const list = document.getElementById("waypoint-list");
-  if (waypoints.length === 0) {
-    list.innerHTML = '<div class="no-data-msg">No waypoints<br/>detected yet…</div>';
+function updateWpList() {
+  const el = document.getElementById("wp-list");
+  if (!waypoints.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-family:var(--mono);font-size:10px;padding:10px 0;text-align:center;">No waypoints yet…</div>';
     return;
   }
-  list.innerHTML = "";
-  waypoints.forEach((wp, i) => {
-    const key = `R${wp.row}C${wp.col}`;
+  el.innerHTML = "";
+  waypoints.forEach((wp,i)=>{
+    const key  = `R${wp.row}C${wp.col}`;
     const data = regionData[key];
     const lvl  = data ? Math.max(0,Math.min(5,data.droughtLevel)) : -1;
-    const col  = lvl >= 0 ? DROUGHT_COLORS[lvl] : "#1e2d3d";
-    const isActive = activeWaypoint === wp.name;
-
-    const div = document.createElement("div");
-    div.className = "waypoint-item" + (isActive ? " active" : "");
+    const col  = lvl>=0 ? D_COLORS[lvl] : "#1e3040";
+    const isAct= activeWaypoint===wp.name;
+    const div  = document.createElement("div");
+    div.className = "wp-item"+(isAct?" active":"");
     div.innerHTML = `
-      <div class="wp-dot" style="background:${col};box-shadow:0 0 6px ${col}"></div>
+      <div class="wp-dot-sm" style="background:${col};box-shadow:0 0 5px ${col}"></div>
       <div class="wp-info">
-        <div class="wp-name">WP${i+1} — ${wp.name}</div>
-        <div class="wp-drought">${lvl>=0 ? DROUGHT_NAMES[lvl] : "No data"}</div>
+        <div class="wp-name" style="color:${isAct?'#00dca0':''}">${wp.name}</div>
+        <div class="wp-sub">${lvl>=0?D_NAMES[lvl]:"No data"}</div>
       </div>
-      <div class="wp-badge" style="color:${col}">${lvl>=0?`D${lvl}`:'?'}</div>
-    `;
-    div.onclick = () => {
-      activeWaypoint = wp.name;
-      updateWaypointList();
+      <div class="wp-badge" style="color:${col}">${lvl>=0?`D${lvl}`:'?'}</div>`;
+    div.onclick = ()=>{
+      activeWaypoint=wp.name;
       updateSidebar(key);
-      document.getElementById("t-wp").textContent = wp.name;
-      drawMap();
+      document.getElementById("t-wp").textContent=wp.name;
+      updateWpList(); draw();
     };
-    list.appendChild(div);
+    el.appendChild(div);
   });
 }
 
-function updateTelemetryPos() {
-  if (!aircraftPos) return;
-  document.getElementById("t-pos").textContent =
-    `${aircraftPos.lat.toFixed(4)}°N  ${Math.abs(aircraftPos.lon).toFixed(4)}°W`;
-}
-
-// ═══════════════════════════════════════════════════════
-//  POLLING FROM PIPEDREAM
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// POLL state.json
+// ═══════════════════════════════════════════════════
 async function fetchState() {
-  if (PIPEDREAM_URL === "YOUR_PIPEDREAM_ENDPOINT_HERE") {
-    // Demo mode — fake some data so the page looks alive
-    demoMode();
-    return;
-  }
   try {
-    const res = await fetch(PIPEDREAM_URL, { cache: "no-store" });
+    const res = await fetch(STATE_URL+"?t="+Date.now(), {cache:"no-store"});
     if (!res.ok) return;
-    const state = await res.json();
-    ingestState(state);
-  } catch(e) {
-    console.warn("Fetch error:", e);
-  }
-}
+    const s = await res.json();
 
-function ingestState(state) {
-  // state shape (sent by Roblox):
-  // { regions: [{row,col,date,precip,temp,droughtLevel}],
-  //   aircraft: {lat,lon},
-  //   waypoints: [{name,lat,lon,row,col}],
-  //   activeWaypoint: "name" }
-
-  if (state.regions) {
-    state.regions.forEach(r => {
-      const key = `R${r.row}C${r.col}`;
-      regionData[key] = { droughtLevel:r.droughtLevel, precip:r.precip, temp:r.temp, date:r.date };
-    });
-    scannedCount = Object.keys(regionData).length;
-    document.getElementById("t-scanned").textContent = scannedCount;
-  }
-
-  if (state.aircraft) {
-    const prev = aircraftPos;
-    aircraftPos = state.aircraft;
-    if (prev) {
-      trailPoints.push(prev);
-      if (trailPoints.length > 40) trailPoints.shift();
+    if (s.regions && s.regions.length) {
+      s.regions.forEach(r=>{
+        regionData[`R${r.row}C${r.col}`] = {
+          droughtLevel:r.droughtLevel, precip:r.precip, temp:r.temp, date:r.date
+        };
+      });
+      document.getElementById("t-scanned").textContent = Object.keys(regionData).length;
     }
-    updateTelemetryPos();
+
+    if (s.aircraft) {
+      if (aircraftPos) { trail.push(aircraftPos); if(trail.length>50) trail.shift(); }
+      aircraftPos = s.aircraft;
+      document.getElementById("t-pos").textContent =
+        `${s.aircraft.lat.toFixed(4)}°N  ${Math.abs(s.aircraft.lon).toFixed(4)}°W`;
+    }
+
+    if (s.waypoints && s.waypoints.length) waypoints = s.waypoints;
+
+    if (s.activeWaypoint) {
+      activeWaypoint = s.activeWaypoint;
+      document.getElementById("t-wp").textContent = s.activeWaypoint;
+      const wp = waypoints.find(w=>w.name===s.activeWaypoint);
+      if (wp) updateSidebar(`R${wp.row}C${wp.col}`);
+    }
+
+    updateWpList();
+    draw();
+
+    // Mark live
+    document.getElementById("live-dot").classList.remove("off");
+    document.getElementById("live-label").textContent = "LIVE";
+    document.getElementById("last-upd").textContent =
+      "UPDATED "+new Date().toUTCString().split(" ")[4]+" UTC";
+
+  } catch(e) {
+    console.warn("state fetch error:", e);
   }
-
-  if (state.waypoints) {
-    waypoints = state.waypoints;
-    updateWaypointList();
-  }
-
-  if (state.activeWaypoint) {
-    activeWaypoint = state.activeWaypoint;
-    document.getElementById("t-wp").textContent = state.activeWaypoint;
-    // Find the region for that waypoint and update sidebar
-    const wp = waypoints.find(w => w.name === state.activeWaypoint);
-    if (wp) updateSidebar(`R${wp.row}C${wp.col}`);
-    updateWaypointList();
-  }
-
-  // Mark live
-  isLive = true;
-  document.getElementById("live-dot").classList.remove("offline");
-  document.getElementById("live-label").textContent = "LIVE";
-  document.getElementById("last-update").textContent =
-    "UPDATED " + new Date().toUTCString().split(" ")[4] + " UTC";
-
-  drawMap();
 }
 
-// ═══════════════════════════════════════════════════════
-//  DEMO MODE (when URL not configured)
-// ═══════════════════════════════════════════════════════
-let demoTick = 0;
-function demoMode() {
-  demoTick++;
-  // Fill some regions
-  const demoRegions = [
-    {row:1,col:1,droughtLevel:0,precip:3.2,temp:71,date:"28 Jun 2026"},
-    {row:1,col:2,droughtLevel:1,precip:1.8,temp:74,date:"28 Jun 2026"},
-    {row:2,col:1,droughtLevel:2,precip:0.9,temp:76,date:"28 Jun 2026"},
-    {row:3,col:2,droughtLevel:3,precip:0.4,temp:80,date:"28 Jun 2026"},
-    {row:4,col:1,droughtLevel:3,precip:0.3,temp:82,date:"28 Jun 2026"},
-    {row:4,col:2,droughtLevel:2,precip:0.7,temp:79,date:"28 Jun 2026"},
-    {row:3,col:4,droughtLevel:4,precip:0.1,temp:85,date:"28 Jun 2026"},
-    {row:2,col:3,droughtLevel:1,precip:2.1,temp:72,date:"28 Jun 2026"},
-  ];
-  demoRegions.forEach(r => { regionData[`R${r.row}C${r.col}`] = r; });
-
-  // Animate aircraft along a path
-  const path = [
-    {lat:38.99,lon:-78.80},{lat:38.82,lon:-78.65},{lat:38.65,lon:-78.50},
-    {lat:38.48,lon:-78.35},{lat:38.30,lon:-78.15}
-  ];
-  const idx = Math.floor((demoTick/3)) % path.length;
-  const prev = aircraftPos;
-  aircraftPos = {
-    lat: path[idx].lat + Math.sin(demoTick*0.1)*0.02,
-    lon: path[idx].lon + Math.cos(demoTick*0.08)*0.02
-  };
-  if (prev) { trailPoints.push(prev); if (trailPoints.length>40) trailPoints.shift(); }
-
-  waypoints = [
-    {name:"Strasburg",    lat:38.99,lon:-78.36,row:1,col:1},
-    {name:"Harrisonburg", lat:38.45,lon:-78.87,row:4,col:1},
-    {name:"Luray",        lat:38.66,lon:-78.46,row:2,col:3},
-    {name:"Shenandoah",   lat:38.48,lon:-78.62,row:3,col:4},
-  ];
-
-  scannedCount = demoRegions.length;
-  document.getElementById("t-scanned").textContent = scannedCount;
-  activeWaypoint = waypoints[idx % waypoints.length].name;
-  document.getElementById("t-wp").textContent = activeWaypoint;
-
-  const wp = waypoints.find(w=>w.name===activeWaypoint);
-  if (wp) {
-    updateSidebar(`R${wp.row}C${wp.col}`);
-    document.getElementById("region-name").textContent = wp.name.toUpperCase();
-  }
-
-  updateTelemetryPos();
-  updateWaypointList();
-  document.getElementById("live-dot").style.background = "#ffb020";
-  document.getElementById("live-dot").style.boxShadow = "0 0 8px #ffb020";
-  document.getElementById("live-label").textContent = "DEMO — set PIPEDREAM_URL";
-  document.getElementById("last-update").textContent = "DEMO MODE";
-  drawMap();
+// ═══════════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════════
+function tick() {
+  const n=new Date();
+  document.getElementById("clock").textContent=
+    [n.getUTCHours(),n.getUTCMinutes(),n.getUTCSeconds()]
+    .map(v=>String(v).padStart(2,"0")).join(":")+" UTC";
 }
+setInterval(tick,1000);
 
-// ═══════════════════════════════════════════════════════
-//  CLOCK
-// ═══════════════════════════════════════════════════════
-function updateClock() {
-  const now = new Date();
-  const h = String(now.getUTCHours()).padStart(2,"0");
-  const m = String(now.getUTCMinutes()).padStart(2,"0");
-  const s = String(now.getUTCSeconds()).padStart(2,"0");
-  document.getElementById("clock").textContent = `${h}:${m}:${s} UTC`;
-}
-setInterval(updateClock, 1000);
-
-// ═══════════════════════════════════════════════════════
-//  BOOT
-// ═══════════════════════════════════════════════════════
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
+// ═══════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════
+resize();
 animatePing();
 fetchState();
-setInterval(fetchState, POLL_INTERVAL_MS);
+setInterval(fetchState, POLL_MS);
+tick();
 </script>
 </body>
 </html>
-
