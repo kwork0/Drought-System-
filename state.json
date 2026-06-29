@@ -1,7 +1,8 @@
 {
+  "activeWaypoint": "Shenandoah N",
   "aircraft": {
     "lat": 38.28,
-    "lon": -78.5056300463867
+    "lon": -78.7197832438151
   },
   "regions": [
     {
