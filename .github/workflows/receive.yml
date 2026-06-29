@@ -4,6 +4,12 @@ on:
   repository_dispatch:
     types: [flight-update]
 
+# Prevents overlapping runs from racing to push to main.
+# Runs queue up one-at-a-time instead of failing each other's pushes.
+concurrency:
+  group: flight-data-push
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -22,11 +28,19 @@ jobs:
           PAYLOAD: ${{ toJson(github.event.client_payload) }}
         run: echo "$PAYLOAD" > state.json
 
-      - name: Commit and push
+      - name: Commit and push (with retry)
         run: |
           git config --global user.email "droughtbot@github.com"
           git config --global user.name "DroughtBot"
           git add state.json
-          git diff --staged --quiet && echo "No changes" || git commit -m "live: flight update"
-          git pull --rebase origin main
-          git push origin main
+          git diff --staged --quiet && echo "No changes" && exit 0
+          git commit -m "live: flight update"
+
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin main && exit 0
+            echo "Push attempt $i failed, retrying..."
+            sleep 2
+          done
+
+          echo "All push attempts failed"
+          exit 1
