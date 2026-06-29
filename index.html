@@ -38,8 +38,9 @@ body {
   z-index: 0;
   /* NASA Earth Observatory Shenandoah topo image */
   background-image: url('https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/imagerecords/3000/3286/SRTM_PIA03383.jpg?w=540&h=689&fit=crop&crop=faces%2Cfocalpoint');
-  background-size: cover;
-  background-position: center top;
+  background-size: contain; 
+  background-repeat: no-repeat;
+  background-position: center center;
   filter: brightness(0.38) saturate(0.7) sepia(0.25);
 }
 /* Dark vignette so edges fade to black */
@@ -357,18 +358,27 @@ const POLL_MS        = 5000;
 
 // ═══════════════════════════════════════════════════
 // GEO BOUNDS — real Shenandoah Valley
-// The topo image covers roughly this bounding box:
 // ═══════════════════════════════════════════════════
 const GEO = { latMin:38.28, latMax:38.99, lonMin:-78.90, lonMax:-78.02 };
 
-// Map canvas occupies the full screen minus sidebar (280px) and header (52px) / telem (110px)
 function mapBounds() {
-  return {
-    x: 0,
-    y: 52,
-    w: window.innerWidth - 280,
-    h: window.innerHeight - 52 - 110
-  };
+  const imgRatio = 540 / 689; 
+  const containerW = window.innerWidth - 280;
+  const containerH = window.innerHeight - 52 - 110;
+  
+  let w, h;
+  if (containerW / containerH > imgRatio) {
+    h = containerH;
+    w = h * imgRatio;
+  } else {
+    w = containerW;
+    h = w / imgRatio;
+  }
+  
+  const x = (containerW - w) / 2;
+  const y = 52 + (containerH - h) / 2;
+  
+  return { x, y, w, h };
 }
 
 function geoToCanvas(lat, lon) {
@@ -411,7 +421,7 @@ const D_CLASS  = ["good","good","warn","bad","bad","bad"];
 // ═══════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════
-let regionData     = {};   // "R{r}C{c}" → {droughtLevel,precip,temp,date}
+let regionData     = {};
 let aircraftPos    = null;
 let waypoints      = [];
 let activeWaypoint = null;
@@ -435,7 +445,7 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const b = mapBounds();
 
-  // Subtle coordinate grid aligned to geo bounds
+  // Subtle coordinate grid
   ctx.strokeStyle = "rgba(0,220,160,0.06)";
   ctx.lineWidth = 1;
   ctx.setLineDash([2,8]);
@@ -449,7 +459,6 @@ function draw() {
   }
   ctx.setLineDash([]);
 
-  // Region dots at real geo positions
   REGIONS.forEach(reg => {
     const key  = `R${reg.row}C${reg.col}`;
     const data = regionData[key];
@@ -457,28 +466,24 @@ function draw() {
     const lvl  = data ? Math.max(0,Math.min(5,data.droughtLevel)) : -1;
     const col  = lvl >= 0 ? D_COLORS[lvl] : "#1e3040";
 
-    // Glow
     const g = ctx.createRadialGradient(x,y,0,x,y,18);
     g.addColorStop(0, col+"55");
     g.addColorStop(1, col+"00");
     ctx.beginPath(); ctx.arc(x,y,18,0,Math.PI*2);
     ctx.fillStyle = g; ctx.fill();
 
-    // Dot
     ctx.beginPath(); ctx.arc(x,y,lvl>=0?8:5,0,Math.PI*2);
     ctx.fillStyle   = col;
     ctx.strokeStyle = col+"99";
     ctx.lineWidth   = 2;
     ctx.fill(); ctx.stroke();
 
-    // Label
     ctx.fillStyle   = data ? col : "#2a4050";
     ctx.font        = `bold 9px 'Space Mono'`;
     ctx.textAlign   = "center";
     ctx.fillText(reg.name.toUpperCase(), x, y + 18);
   });
 
-  // Aircraft trail
   trail.forEach((p, i) => {
     const {x,y} = geoToCanvas(p.lat, p.lon);
     ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2);
@@ -486,7 +491,6 @@ function draw() {
     ctx.fill();
   });
 
-  // Ping ring on aircraft
   if (aircraftPos && pingA > 0.01) {
     const {x,y} = geoToCanvas(aircraftPos.lat, aircraftPos.lon);
     ctx.beginPath(); ctx.arc(x,y,pingR,0,Math.PI*2);
@@ -495,16 +499,13 @@ function draw() {
     ctx.stroke();
   }
 
-  // Aircraft icon
   if (aircraftPos) {
     const {x,y} = geoToCanvas(aircraftPos.lat, aircraftPos.lon);
-    // outer glow
     const ag = ctx.createRadialGradient(x,y,0,x,y,26);
     ag.addColorStop(0,"rgba(0,220,160,0.3)");
     ag.addColorStop(1,"rgba(0,220,160,0)");
     ctx.beginPath(); ctx.arc(x,y,26,0,Math.PI*2);
     ctx.fillStyle = ag; ctx.fill();
-    // plane shape
     ctx.save(); ctx.translate(x,y);
     ctx.fillStyle   = "#00dca0";
     ctx.strokeStyle = "#ffffff";
@@ -516,7 +517,6 @@ function draw() {
     ctx.restore();
   }
 
-  // Waypoints (crosshair style)
   waypoints.forEach((wp, i) => {
     const {x,y} = geoToCanvas(wp.lat, wp.lon);
     const isAct = activeWaypoint === wp.name;
@@ -538,7 +538,6 @@ function draw() {
   });
 }
 
-// Animate ping ring
 function animatePing() {
   pingR += 0.8;
   pingA -= 0.008;
@@ -547,12 +546,8 @@ function animatePing() {
   requestAnimationFrame(animatePing);
 }
 
-// ═══════════════════════════════════════════════════
-// TOOLTIP
-// ═══════════════════════════════════════════════════
 const tooltip = document.getElementById("tooltip");
 canvas.addEventListener("mousemove", e => {
-  const b = mapBounds();
   const mx = e.clientX, my = e.clientY;
   let closest = null, minDist = 30;
   REGIONS.forEach(reg => {
@@ -582,9 +577,6 @@ canvas.addEventListener("mousemove", e => {
 });
 canvas.addEventListener("mouseleave", () => tooltip.style.display = "none");
 
-// ═══════════════════════════════════════════════════
-// UI UPDATE
-// ═══════════════════════════════════════════════════
 function updateSidebar(regionKey) {
   const data = regionData[regionKey];
   const reg  = REGIONS.find(r=>`R${r.row}C${r.col}`===regionKey);
@@ -601,13 +593,11 @@ function updateSidebar(regionKey) {
   fill.style.width      = ((lvl/5)*100)+"%";
   fill.style.background = D_COLORS[lvl];
   document.getElementById("dbar-text").textContent = D_NAMES[lvl];
-  // telemetry
   const td = document.getElementById("t-dl");
   td.textContent = `D${lvl}`; td.className = "t-val "+(lvl>=3?"bad":lvl>=2?"warn":"");
   document.getElementById("t-dlname").textContent  = D_NAMES[lvl];
   document.getElementById("t-precip").textContent  = typeof data.precip==='number'?data.precip.toFixed(2):'—';
   document.getElementById("t-temp").textContent    = typeof data.temp==='number'?data.temp.toFixed(1):'—';
-  // notes
   const notes=["Vegetation health nominal. No stress detected.","Conditions abnormally dry. Monitor soil moisture.","Moderate drought. Crop stress likely.","Severe drought. Water conservation recommended.","Extreme drought. Widespread agricultural losses.","EXCEPTIONAL DROUGHT — Emergency conservation in effect."];
   document.getElementById("mission-notes").innerHTML =
     `<span style="color:${D_COLORS[lvl]}">${reg?reg.name:regionKey}</span><br><br>${notes[lvl]}`;
@@ -615,10 +605,7 @@ function updateSidebar(regionKey) {
 
 function updateWpList() {
   const el = document.getElementById("wp-list");
-  if (!waypoints.length) {
-    el.innerHTML = '<div style="color:var(--muted);font-family:var(--mono);font-size:10px;padding:10px 0;text-align:center;">No waypoints yet…</div>';
-    return;
-  }
+  if (!waypoints.length) return;
   el.innerHTML = "";
   waypoints.forEach((wp,i)=>{
     const key  = `R${wp.row}C${wp.col}`;
@@ -645,15 +632,11 @@ function updateWpList() {
   });
 }
 
-// ═══════════════════════════════════════════════════
-// POLL state.json
-// ═══════════════════════════════════════════════════
 async function fetchState() {
   try {
     const res = await fetch(STATE_URL+"?t="+Date.now(), {cache:"no-store"});
     if (!res.ok) return;
     const s = await res.json();
-
     if (s.regions && s.regions.length) {
       s.regions.forEach(r=>{
         regionData[`R${r.row}C${r.col}`] = {
@@ -662,40 +645,28 @@ async function fetchState() {
       });
       document.getElementById("t-scanned").textContent = Object.keys(regionData).length;
     }
-
     if (s.aircraft) {
       if (aircraftPos) { trail.push(aircraftPos); if(trail.length>50) trail.shift(); }
       aircraftPos = s.aircraft;
       document.getElementById("t-pos").textContent =
         `${s.aircraft.lat.toFixed(4)}°N  ${Math.abs(s.aircraft.lon).toFixed(4)}°W`;
     }
-
     if (s.waypoints && s.waypoints.length) waypoints = s.waypoints;
-
     if (s.activeWaypoint) {
       activeWaypoint = s.activeWaypoint;
       document.getElementById("t-wp").textContent = s.activeWaypoint;
       const wp = waypoints.find(w=>w.name===s.activeWaypoint);
       if (wp) updateSidebar(`R${wp.row}C${wp.col}`);
     }
-
     updateWpList();
     draw();
-
-    // Mark live
     document.getElementById("live-dot").classList.remove("off");
     document.getElementById("live-label").textContent = "LIVE";
     document.getElementById("last-upd").textContent =
       "UPDATED "+new Date().toUTCString().split(" ")[4]+" UTC";
-
-  } catch(e) {
-    console.warn("state fetch error:", e);
-  }
+  } catch(e) { console.warn("state fetch error:", e); }
 }
 
-// ═══════════════════════════════════════════════════
-// CLOCK
-// ═══════════════════════════════════════════════════
 function tick() {
   const n=new Date();
   document.getElementById("clock").textContent=
@@ -704,9 +675,6 @@ function tick() {
 }
 setInterval(tick,1000);
 
-// ═══════════════════════════════════════════════════
-// BOOT
-// ═══════════════════════════════════════════════════
 resize();
 animatePing();
 fetchState();
