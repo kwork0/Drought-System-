@@ -1,7 +1,8 @@
 {
+  "activeWaypoint": "Swift Run Gap",
   "aircraft": {
-    "lat": 38.4964400014242,
-    "lon": -78.4273693074544
+    "lat": 38.28,
+    "lon": -78.9
   },
   "regions": [
     {
