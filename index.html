@@ -445,6 +445,30 @@ function draw() {
     ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx,cy+s*dy);ctx.stroke();
   });
 
+  // Trail — oldest faint, newest bright green. Drawn before region
+  // dots so the path sits underneath labels and waypoints.
+  if(trail.length>1){
+    for(let i=1;i<trail.length;i++){
+      const p0=geo2c(trail[i-1].lat,trail[i-1].lon);
+      const p1=geo2c(trail[i].lat,trail[i].lon);
+      // skip segments that fall outside the visible map area
+      if(p0.x<b.x||p0.x>b.x+b.w||p0.y<b.y||p0.y>b.y+b.h) continue;
+      if(p1.x<b.x||p1.x>b.x+b.w||p1.y<b.y||p1.y>b.y+b.h) continue;
+      const alpha=0.08+(i/trail.length)*0.75;
+      ctx.beginPath();
+      ctx.moveTo(p0.x,p0.y);ctx.lineTo(p1.x,p1.y);
+      ctx.strokeStyle=`rgba(0,255,136,${alpha})`;
+      ctx.lineWidth=2;ctx.stroke();
+    }
+    // Bright anchor dot at the newest trail point
+    const last=trail[trail.length-1];
+    const {x:lx,y:ly}=geo2c(last.lat,last.lon);
+    if(lx>=b.x&&lx<=b.x+b.w&&ly>=b.y&&ly<=b.y+b.h){
+      ctx.beginPath();ctx.arc(lx,ly,3,0,Math.PI*2);
+      ctx.fillStyle="rgba(0,255,136,0.9)";ctx.fill();
+    }
+  }
+
   // Region dots
   REGIONS.forEach(reg=>{
     const key=`R${reg.row}C${reg.col}`;
@@ -471,27 +495,6 @@ function draw() {
     ctx.font="bold 8px 'Share Tech Mono'";
     ctx.textAlign="center";
     ctx.fillText(reg.name.toUpperCase(),x,y+18);
-  });
-
-  // Trail — connected flight path line, fading from old to recent,
-  // plus faint dots at each recorded point.
-  if(trail.length>1){
-    for(let i=1;i<trail.length;i++){
-      const p0=geo2c(trail[i-1].lat,trail[i-1].lon);
-      const p1=geo2c(trail[i].lat,trail[i].lon);
-      const alpha=(i/trail.length)*0.55;
-      ctx.beginPath();
-      ctx.moveTo(p0.x,p0.y);ctx.lineTo(p1.x,p1.y);
-      ctx.strokeStyle=`rgba(0,255,136,${alpha})`;
-      ctx.lineWidth=1.5;
-      ctx.stroke();
-    }
-  }
-  trail.forEach((p,i)=>{
-    const {x,y}=geo2c(p.lat,p.lon);
-    ctx.beginPath();ctx.arc(x,y,1.5,0,Math.PI*2);
-    ctx.fillStyle=`rgba(255,255,255,${(i/trail.length)*0.5})`;
-    ctx.fill();
   });
 
   // Ping
