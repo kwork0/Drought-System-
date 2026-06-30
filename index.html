@@ -251,6 +251,41 @@ header {
   backdrop-filter:blur(12px);
 }
 
+/* ── WEATHER POPUP (click on a waypoint/region) ── */
+#wxpop{
+  position:fixed;z-index:55;display:none;
+  background:rgba(5,9,14,0.97);
+  border:1px solid rgba(0,255,136,0.45);
+  border-radius:6px;
+  width:220px;
+  font-family:var(--mono);
+  backdrop-filter:blur(16px);
+  box-shadow:0 8px 30px rgba(0,0,0,0.5);
+}
+#wxpop .wx-head{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 12px 8px;border-bottom:1px solid var(--border);
+}
+#wxpop .wx-name{font-size:12px;letter-spacing:0.06em;color:var(--text);}
+#wxpop .wx-close{
+  cursor:pointer;color:var(--muted);font-size:13px;line-height:1;
+  padding:2px 5px;border-radius:3px;
+}
+#wxpop .wx-close:hover{color:var(--text);background:rgba(255,255,255,0.08);}
+#wxpop .wx-body{padding:10px 12px 12px;}
+#wxpop .wx-row{
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);
+}
+#wxpop .wx-row:last-child{border-bottom:none;}
+#wxpop .wx-k{font-size:9px;color:var(--muted);letter-spacing:0.07em;text-transform:uppercase;}
+#wxpop .wx-v{font-size:14px;color:var(--accent);font-weight:600;}
+#wxpop .wx-v.warn{color:var(--warn);}
+#wxpop .wx-v.bad{color:var(--bad);}
+#wxpop .wx-loading{
+  font-size:10px;color:var(--muted);text-align:center;padding:16px 0;
+}
+
 /* credit */
 #credit{
   position:fixed;bottom:118px;left:12px;
@@ -381,6 +416,15 @@ header {
 
 <div id="credit">TOPO: OPENTOPOMAP.ORG / NASA SRTM — SHENANDOAH VALLEY, VA</div>
 <div id="tip"></div>
+<div id="wxpop">
+  <div class="wx-head">
+    <span class="wx-name" id="wx-name">—</span>
+    <span class="wx-close" id="wx-close">✕</span>
+  </div>
+  <div class="wx-body" id="wx-body">
+    <div class="wx-loading">Fetching weather…</div>
+  </div>
+</div>
 
 <script>
 // ════════════════════════════════════════════
@@ -596,6 +640,130 @@ canvas.addEventListener("mousemove",e=>{
   } else tip.style.display="none";
 });
 canvas.addEventListener("mouseleave",()=>tip.style.display="none");
+
+// ════════════════════════════════════════════
+// WEATHER POPUP — click a waypoint/region dot
+// ════════════════════════════════════════════
+const wxpop = document.getElementById("wxpop");
+const wxName = document.getElementById("wx-name");
+const wxBody = document.getElementById("wx-body");
+const wxClose = document.getElementById("wx-close");
+let wxCache = {}; // keyed by "lat,lon" rounded, avoids re-fetching same spot repeatedly
+
+wxClose.addEventListener("click", ()=>{ wxpop.style.display="none"; });
+
+function findClickTarget(clientX, clientY){
+  let closest=null, minD=18;
+  // check region dots first (drought-colored dots)
+  REGIONS.forEach(reg=>{
+    const {x,y}=geo2c(reg.lat,reg.lon);
+    const d=Math.hypot(clientX-x, clientY-y);
+    if(d<minD){minD=d;closest=reg;}
+  });
+  // also check waypoint markers (may be same names, but covers in-game-only points)
+  waypoints.forEach(wp=>{
+    const {x,y}=geo2c(wp.lat,wp.lon);
+    const d=Math.hypot(clientX-x, clientY-y);
+    if(d<minD){minD=d;closest=wp;}
+  });
+  return closest;
+}
+
+canvas.addEventListener("click", async (e)=>{
+  const target = findClickTarget(e.clientX, e.clientY);
+  if(!target){ wxpop.style.display="none"; return; }
+
+  // also refresh the Current Region sidebar to match what was clicked
+  const key = `R${target.row}C${target.col}`;
+  updateSidebar(key);
+
+  wxName.textContent = target.name.toUpperCase();
+  wxBody.innerHTML = '<div class="wx-loading">Fetching weather…</div>';
+
+  // position popup near click, kept on-screen
+  let px = e.clientX + 16, py = e.clientY - 10;
+  if(px + 230 > window.innerWidth) px = e.clientX - 236;
+  if(py + 160 > window.innerHeight) py = window.innerHeight - 170;
+  wxpop.style.left = px+"px"; wxpop.style.top = Math.max(60,py)+"px";
+  wxpop.style.display = "block";
+
+  await loadWeather(target.lat, target.lon);
+});
+
+async function loadWeather(lat, lon){
+  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  if(wxCache[cacheKey]){ renderWeather(wxCache[cacheKey]); return; }
+
+  try{
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
+      `&daily=precipitation_sum,precipitation_probability_max,temperature_2m_max,temperature_2m_min`+
+      `&past_days=14&forecast_days=5&timezone=auto&precipitation_unit=inch&temperature_unit=fahrenheit`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("Weather API error "+res.status);
+    const data = await res.json();
+    wxCache[cacheKey] = data;
+    renderWeather(data);
+  }catch(err){
+    wxBody.innerHTML = `<div class="wx-loading" style="color:var(--bad)">Weather unavailable<br><span style="font-size:9px">${err.message}</span></div>`;
+  }
+}
+
+function renderWeather(data){
+  const days = data.daily.time;
+  const precip = data.daily.precipitation_sum;
+  const probMax = data.daily.precipitation_probability_max;
+  const tmax = data.daily.temperature_2m_max;
+  const tmin = data.daily.temperature_2m_min;
+
+  // "past_days=14" means index 0..13 are history, index 14 is today, 15+ is forecast
+  const todayIdx = 14;
+
+  // Days since it rained: walk backward from today through history
+  let daysSinceRain = null;
+  for(let i=todayIdx; i>=0; i--){
+    if(precip[i] !== null && precip[i] >= 0.01){
+      daysSinceRain = todayIdx - i;
+      break;
+    }
+  }
+  if(daysSinceRain === null) daysSinceRain = todayIdx; // no rain in entire lookback window
+
+  // Rain coming in: walk forward from tomorrow through forecast
+  let rainComingDays = null, rainComingAmt = 0, rainComingProb = 0;
+  for(let i=todayIdx+1; i<days.length; i++){
+    if(precip[i] !== null && precip[i] >= 0.01){
+      rainComingDays = i - todayIdx;
+      rainComingAmt = precip[i];
+      rainComingProb = probMax[i] ?? 0;
+      break;
+    }
+  }
+
+  const dsrClass = daysSinceRain>=10?"bad":daysSinceRain>=5?"warn":"";
+  const rcText = rainComingDays===null
+    ? `<span style="color:var(--muted)">None in 5-day forecast</span>`
+    : (rainComingDays===1 ? "Tomorrow" : `In ${rainComingDays} days`);
+  const rcSub = rainComingDays===null ? "" :
+    `${rainComingAmt.toFixed(2)}" · ${Math.round(rainComingProb)}% chance`;
+
+  const todayHigh = tmax[todayIdx], todayLow = tmin[todayIdx];
+
+  wxBody.innerHTML = `
+    <div class="wx-row">
+      <span class="wx-k">Days Since It Rained</span>
+      <span class="wx-v ${dsrClass}">${daysSinceRain}${daysSinceRain===1?' day':' days'}</span>
+    </div>
+    <div class="wx-row">
+      <span class="wx-k">Rain Coming In</span>
+      <span class="wx-v">${rcText}</span>
+    </div>
+    ${rcSub ? `<div class="wx-row" style="padding-top:0"><span class="wx-k"></span><span style="font-size:10px;color:var(--muted)">${rcSub}</span></div>` : ""}
+    <div class="wx-row">
+      <span class="wx-k">Today's High / Low</span>
+      <span class="wx-v" style="color:var(--text)">${Math.round(todayHigh)}° / ${Math.round(todayLow)}°</span>
+    </div>
+  `;
+}
 
 // ════════════════════════════════════════════
 // UI
