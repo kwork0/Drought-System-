@@ -41,7 +41,7 @@ body{font-family:var(--sans);font-size:13px;color:var(--text);}
   pointer-events:none;
 }
 @media (max-width:680px){
-  #topo-img{ height:calc(100% - 392px); }
+  #topo-img{ height:calc(100% - 452px); }
 }
 
 /* Dark overlay — lets SRTM terrain bleed through while keeping UI readable */
@@ -212,15 +212,15 @@ header {
   position:fixed;bottom:0;left:0;right:0;
   height:110px;z-index:20;
   display:grid;
-  grid-template-columns:repeat(5,1fr);
+  grid-template-columns:repeat(7,1fr);
   background:var(--panel);
   border-top:1px solid var(--border);
   backdrop-filter:blur(20px);
 }
 @media (max-width:680px){
   #telem{
-    height:160px;
-    grid-template-columns:repeat(3,1fr);
+    height:220px;
+    grid-template-columns:repeat(4,1fr);
     grid-template-rows:1fr 1fr;
   }
 }
@@ -412,6 +412,11 @@ header {
     <div class="tv g" id="t-sc">0</div>
     <div class="tu">of 20</div>
   </div>
+  <div class="tb">
+    <div class="tk">Cloud Cover</div>
+    <div class="tv" id="t-cc">—</div>
+    <div class="tu" id="t-wind">wind —</div>
+  </div>
 </div>
 
 <div id="credit">TOPO: OPENTOPOMAP.ORG / NASA SRTM — SHENANDOAH VALLEY, VA</div>
@@ -421,6 +426,7 @@ header {
     <span class="wx-name" id="wx-name">—</span>
     <span class="wx-close" id="wx-close">✕</span>
   </div>
+  <div id="wx-alert" style="display:none;margin:0 12px;padding:6px 8px;border:1px solid;border-radius:4px;font-size:10px;background:rgba(255,255,255,0.03);"></div>
   <div class="wx-body" id="wx-body">
     <div class="wx-loading">Fetching weather…</div>
   </div>
@@ -437,7 +443,7 @@ const POLL_MS   = 5000;
 const GEO = { latMin:38.0, latMax:39.0, lonMin:-79.0, lonMax:-78.0 };
 
 function mapBounds() {
-  const telemH = window.innerWidth <= 680 ? 160 : 110;
+  const telemH = window.innerWidth <= 680 ? 220 : 110;
   return { x:0, y:52+180, w:window.innerWidth, h:window.innerHeight-52-180-telemH };
 }
 function geo2c(lat, lon) {
@@ -483,6 +489,8 @@ const D_CLS   = ["g","g","","w","r","r"];
 // STATE
 // ════════════════════════════════════════════
 let rData = {}, aircraft=null, waypoints=[], activeWp=null, trail=[], overMap=false;
+let lastClickedWx = null; // {lat,lon,cloudPct,windSpd,windDir} for map wind-marker overlay
+let clickedLat = null, clickedLon = null;
 let pingR=0, pingA=0;
 
 // ════════════════════════════════════════════
@@ -518,6 +526,22 @@ function draw() {
     ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+s*dx,cy);ctx.stroke();
     ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx,cy+s*dy);ctx.stroke();
   });
+
+  // Ambient cloud layer — stylized puffs driven by live cloud_cover %
+  // and drifting per live wind direction/speed. Clipped to map bounds.
+  if(ambientWx.cloudPct > 2){
+    ctx.save();
+    ctx.beginPath(); ctx.rect(b.x,b.y,b.w,b.h); ctx.clip();
+    clouds.forEach(c=>{
+      const cx = b.x + c.x*b.w, cy = b.y + c.y*b.h;
+      const grad = ctx.createRadialGradient(cx,cy,0,cx,cy,c.r);
+      grad.addColorStop(0, `rgba(220,230,235,${c.a})`);
+      grad.addColorStop(1, `rgba(220,230,235,0)`);
+      ctx.beginPath(); ctx.arc(cx,cy,c.r,0,Math.PI*2);
+      ctx.fillStyle = grad; ctx.fill();
+    });
+    ctx.restore();
+  }
 
   // Trail — oldest faint, newest bright green. Drawn before region
   // dots so the path sits underneath labels and waypoints.
@@ -592,6 +616,25 @@ function draw() {
     ctx.restore();
   }
 
+  // Wind marker — shown only at the last-clicked waypoint, with live direction/speed
+  if(lastClickedWx && typeof lastClickedWx.windDir === 'number'){
+    const {x,y} = geo2c(lastClickedWx.lat, lastClickedWx.lon);
+    ctx.save();
+    ctx.translate(x, y-34);
+    ctx.rotate((lastClickedWx.windDir * Math.PI/180));
+    ctx.beginPath();
+    ctx.moveTo(0,-9); ctx.lineTo(4,4); ctx.lineTo(0,1); ctx.lineTo(-4,4);
+    ctx.closePath();
+    ctx.fillStyle="rgba(120,200,255,0.9)";
+    ctx.fill();
+    ctx.restore();
+    if(typeof lastClickedWx.windSpd === 'number'){
+      ctx.fillStyle="rgba(120,200,255,0.85)";
+      ctx.font="8px 'Share Tech Mono'";ctx.textAlign="center";
+      ctx.fillText(`${Math.round(lastClickedWx.windSpd)}mph`, x, y-44);
+    }
+  }
+
   // Waypoints
   waypoints.forEach((wp,i)=>{
     const {x,y}=geo2c(wp.lat,wp.lon);
@@ -613,9 +656,83 @@ function draw() {
 function animatePing(){
   pingR+=0.9;pingA-=0.009;
   if(pingA<=0){pingR=0;pingA=0.75;}
-  if(aircraft) draw();
+  driftClouds();
+  draw(); // always redraw so the cloud layer animates even with no aircraft signal
   requestAnimationFrame(animatePing);
 }
+
+// ════════════════════════════════════════════
+// AMBIENT CLOUD OVERLAY
+// Driven by a single "center of map" weather reading (cloud_cover %,
+// wind speed/direction). Not real cloud shapes — a stylized drifting
+// puff layer whose density and speed track live conditions.
+// ════════════════════════════════════════════
+let ambientWx = { cloudPct: 0, windSpd: 0, windDir: 0 };
+let clouds = []; // {x,y,r,a} in normalized [0,1] map-space
+const CLOUD_COUNT_MAX = 26;
+
+function seedClouds(n){
+  clouds = [];
+  for(let i=0;i<n;i++){
+    clouds.push({
+      x: Math.random(), y: Math.random(),
+      r: 40 + Math.random()*90,
+      a: 0.04 + Math.random()*0.08,
+      drift: 0.5 + Math.random()*0.5
+    });
+  }
+}
+seedClouds(10);
+
+function driftClouds(){
+  const targetCount = Math.round((ambientWx.cloudPct/100) * CLOUD_COUNT_MAX);
+  while(clouds.length < targetCount) clouds.push({
+    x: Math.random(), y: Math.random(),
+    r: 40+Math.random()*90, a: 0.04+Math.random()*0.08, drift: 0.5+Math.random()*0.5
+  });
+  while(clouds.length > targetCount) clouds.pop();
+
+  // wind direction: meteorological convention (degrees FROM which wind blows)
+  // convert to a drift vector (direction TO which clouds move)
+  const rad = ((ambientWx.windDir + 180) % 360) * Math.PI/180;
+  const speedFactor = Math.min(ambientWx.windSpd, 30) / 30; // normalize 0-1
+  const dx = Math.sin(rad) * 0.0006 * (0.3 + speedFactor);
+  const dy = -Math.cos(rad) * 0.0006 * (0.3 + speedFactor);
+
+  clouds.forEach(c=>{
+    c.x += dx * c.drift;
+    c.y += dy * c.drift;
+    if(c.x < -0.15) c.x = 1.15;
+    if(c.x > 1.15) c.x = -0.15;
+    if(c.y < -0.15) c.y = 1.15;
+    if(c.y > 1.15) c.y = -0.15;
+  });
+}
+
+async function loadAmbientWeather(){
+  // Center of the Shenandoah Valley map (roughly geographic centroid of GEO bounds)
+  const lat = (GEO.latMin+GEO.latMax)/2, lon = (GEO.lonMin+GEO.lonMax)/2;
+  try{
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
+      `&current=cloud_cover,wind_speed_10m,wind_direction_10m&wind_speed_unit=mph&timezone=auto`;
+    const res = await fetch(url);
+    if(!res.ok) return;
+    const data = await res.json();
+    if(data.current){
+      ambientWx = {
+        cloudPct: data.current.cloud_cover ?? 0,
+        windSpd: data.current.wind_speed_10m ?? 0,
+        windDir: data.current.wind_direction_10m ?? 0
+      };
+      const ccEl = document.getElementById("t-cc");
+      const wEl = document.getElementById("t-wind");
+      if(ccEl) ccEl.textContent = Math.round(ambientWx.cloudPct)+"%";
+      if(wEl) wEl.textContent = `wind ${Math.round(ambientWx.windSpd)}mph`;
+    }
+  }catch(e){ /* ambient layer just stays at last-known state on failure */ }
+}
+loadAmbientWeather();
+setInterval(loadAmbientWeather, 15*60*1000); // refresh every 15 min — ambient only, not per-click
 
 // ════════════════════════════════════════════
 // TOOLTIP
@@ -679,6 +796,8 @@ canvas.addEventListener("click", async (e)=>{
 
   wxName.textContent = target.name.toUpperCase();
   wxBody.innerHTML = '<div class="wx-loading">Fetching weather…</div>';
+  document.getElementById("wx-alert").style.display = "none";
+  clickedLat = target.lat; clickedLon = target.lon;
 
   // position popup near click, kept on-screen
   let px = e.clientX + 16, py = e.clientY - 10;
@@ -692,12 +811,13 @@ canvas.addEventListener("click", async (e)=>{
 
 async function loadWeather(lat, lon){
   const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
-  if(wxCache[cacheKey]){ renderWeather(wxCache[cacheKey]); return; }
+  if(wxCache[cacheKey]){ renderWeather(wxCache[cacheKey]); loadAlerts(lat, lon, cacheKey); return; }
 
   try{
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
       `&daily=precipitation_sum,precipitation_probability_max,temperature_2m_max,temperature_2m_min`+
-      `&past_days=14&forecast_days=5&timezone=auto&precipitation_unit=inch&temperature_unit=fahrenheit`;
+      `&current=cloud_cover,wind_speed_10m,wind_direction_10m,relative_humidity_2m,soil_moisture_0_to_1cm`+
+      `&past_days=14&forecast_days=5&timezone=auto&precipitation_unit=inch&temperature_unit=fahrenheit&wind_speed_unit=mph`;
     const res = await fetch(url);
     if(!res.ok) throw new Error("Weather API error "+res.status);
     const data = await res.json();
@@ -706,6 +826,35 @@ async function loadWeather(lat, lon){
   }catch(err){
     wxBody.innerHTML = `<div class="wx-loading" style="color:var(--bad)">Weather unavailable<br><span style="font-size:9px">${err.message}</span></div>`;
   }
+  loadAlerts(lat, lon, cacheKey);
+}
+
+let alertCache = {};
+async function loadAlerts(lat, lon, cacheKey){
+  const alertEl = document.getElementById("wx-alert");
+  if(alertCache[cacheKey] !== undefined){ renderAlert(alertCache[cacheKey]); return; }
+  try{
+    const url = `https://api.weather.gov/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`;
+    const res = await fetch(url, { headers:{ "Accept":"application/geo+json" } });
+    if(!res.ok) throw new Error();
+    const data = await res.json();
+    const alert = (data.features && data.features.length) ? data.features[0].properties : null;
+    alertCache[cacheKey] = alert;
+    renderAlert(alert);
+  }catch(e){
+    alertCache[cacheKey] = null;
+    renderAlert(null);
+  }
+}
+
+function renderAlert(alert){
+  const el = document.getElementById("wx-alert");
+  if(!el) return;
+  if(!alert){ el.style.display = "none"; el.innerHTML = ""; return; }
+  const sevColor = {Extreme:"var(--bad)",Severe:"var(--bad)",Moderate:"var(--warn)",Minor:"var(--warn)"}[alert.severity] || "var(--warn)";
+  el.style.display = "block";
+  el.style.borderColor = sevColor;
+  el.innerHTML = `<span style="color:${sevColor};font-weight:600">⚠ ${alert.event}</span>`;
 }
 
 function renderWeather(data){
@@ -747,6 +896,17 @@ function renderWeather(data){
     `${rainComingAmt.toFixed(2)}" · ${Math.round(rainComingProb)}% chance`;
 
   const todayHigh = tmax[todayIdx], todayLow = tmin[todayIdx];
+  const cur = data.current || {};
+  const cloudPct = cur.cloud_cover;
+  const windSpd = cur.wind_speed_10m;
+  const windDir = cur.wind_direction_10m;
+  const humidity = cur.relative_humidity_2m;
+  const soil = cur.soil_moisture_0_to_1cm; // m³/m³, 0-1 range
+
+  const windArrow = (typeof windDir === 'number')
+    ? `<span style="display:inline-block;transform:rotate(${windDir}deg)">↓</span>` : '';
+  const soilPct = (typeof soil === 'number') ? Math.round(soil*100) : null;
+  const soilClass = soilPct!==null ? (soilPct<15?"bad":soilPct<25?"warn":"") : "";
 
   wxBody.innerHTML = `
     <div class="wx-row">
@@ -762,7 +922,27 @@ function renderWeather(data){
       <span class="wx-k">Today's High / Low</span>
       <span class="wx-v" style="color:var(--text)">${Math.round(todayHigh)}° / ${Math.round(todayLow)}°</span>
     </div>
+    <div class="wx-row">
+      <span class="wx-k">Cloud Cover</span>
+      <span class="wx-v" style="color:var(--text)">${typeof cloudPct==='number'?Math.round(cloudPct)+'%':'—'}</span>
+    </div>
+    <div class="wx-row">
+      <span class="wx-k">Wind</span>
+      <span class="wx-v" style="color:var(--text)">${typeof windSpd==='number'?Math.round(windSpd)+' mph '+windArrow:'—'}</span>
+    </div>
+    <div class="wx-row">
+      <span class="wx-k">Humidity</span>
+      <span class="wx-v" style="color:var(--text)">${typeof humidity==='number'?Math.round(humidity)+'%':'—'}</span>
+    </div>
+    <div class="wx-row">
+      <span class="wx-k">Soil Moisture</span>
+      <span class="wx-v ${soilClass}">${soilPct!==null?soilPct+'%':'—'}</span>
+    </div>
   `;
+
+  // Stash current snapshot so the map can draw a wind marker / cloud tint at this point
+  lastClickedWx = { lat: clickedLat, lon: clickedLon, cloudPct, windSpd, windDir };
+  draw();
 }
 
 // ════════════════════════════════════════════
