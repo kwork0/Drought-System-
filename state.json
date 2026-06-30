@@ -5,7 +5,168 @@
     "lon": -78.8979210877419
   },
   "overMap": false,
-  "regions": [],
+  "regions": [
+    {
+      "col": 1,
+      "date": "2026-06-29",
+      "droughtLevel": 3,
+      "precip": 0.732283464566929,
+      "row": 1,
+      "temp": 73.418
+    },
+    {
+      "col": 2,
+      "date": "2026-06-29",
+      "droughtLevel": 3,
+      "precip": 0.71259842519685,
+      "row": 1,
+      "temp": 72.614
+    },
+    {
+      "col": 3,
+      "date": "2026-06-29",
+      "droughtLevel": 0,
+      "precip": 4.96456692913386,
+      "row": 1,
+      "temp": 72.92
+    },
+    {
+      "col": 4,
+      "date": "2026-06-29",
+      "droughtLevel": 2,
+      "precip": 1.10629921259843,
+      "row": 1,
+      "temp": 73.13
+    },
+    {
+      "col": 5,
+      "date": "2026-06-29",
+      "droughtLevel": 0,
+      "precip": 3.44094488188976,
+      "row": 1,
+      "temp": 72.734
+    },
+    {
+      "col": 1,
+      "date": "2026-06-29",
+      "droughtLevel": 3,
+      "precip": 0.748031496062992,
+      "row": 2,
+      "temp": 72.272
+    },
+    {
+      "col": 2,
+      "date": "2026-06-29",
+      "droughtLevel": 0,
+      "precip": 2.96062992125984,
+      "row": 2,
+      "temp": 71.324
+    },
+    {
+      "col": 3,
+      "date": "2026-06-29",
+      "droughtLevel": 2,
+      "precip": 1.00787401574803,
+      "row": 2,
+      "temp": 72.086
+    },
+    {
+      "col": 4,
+      "date": "2026-06-29",
+      "droughtLevel": 2,
+      "precip": 1.1259842519685,
+      "row": 2,
+      "temp": 68.54
+    },
+    {
+      "col": 5,
+      "date": "2026-06-29",
+      "droughtLevel": 1,
+      "precip": 2.14173228346457,
+      "row": 2,
+      "temp": 64.568
+    },
+    {
+      "col": 1,
+      "date": "2026-06-29",
+      "droughtLevel": 0,
+      "precip": 4.46062992125984,
+      "row": 3,
+      "temp": 71.078
+    },
+    {
+      "col": 2,
+      "date": "2026-06-29",
+      "droughtLevel": 0,
+      "precip": 3.48818897637795,
+      "row": 3,
+      "temp": 73.196
+    },
+    {
+      "col": 3,
+      "date": "2026-06-29",
+      "droughtLevel": 1,
+      "precip": 2.76377952755905,
+      "row": 3,
+      "temp": 71.768
+    },
+    {
+      "col": 4,
+      "date": "2026-06-29",
+      "droughtLevel": 0,
+      "precip": 5.11811023622047,
+      "row": 3,
+      "temp": 71.756
+    },
+    {
+      "col": 5,
+      "date": "2026-06-29",
+      "droughtLevel": 2,
+      "precip": 1.0511811023622,
+      "row": 3,
+      "temp": 70.664
+    },
+    {
+      "col": 1,
+      "date": "2026-06-29",
+      "droughtLevel": 3,
+      "precip": 0.925196850393701,
+      "row": 4,
+      "temp": 71.492
+    },
+    {
+      "col": 2,
+      "date": "2026-06-29",
+      "droughtLevel": 0,
+      "precip": 4.9251968503937,
+      "row": 4,
+      "temp": 71.876
+    },
+    {
+      "col": 3,
+      "date": "2026-06-29",
+      "droughtLevel": 1,
+      "precip": 2.60236220472441,
+      "row": 4,
+      "temp": 71.57
+    },
+    {
+      "col": 4,
+      "date": "2026-06-29",
+      "droughtLevel": 0,
+      "precip": 5.6259842519685,
+      "row": 4,
+      "temp": 66.374
+    },
+    {
+      "col": 5,
+      "date": "2026-06-29",
+      "droughtLevel": 3,
+      "precip": 0.519685039370079,
+      "row": 4,
+      "temp": 73.202
+    }
+  ],
   "trail": [
     {
       "lat": 38.426454795897,
